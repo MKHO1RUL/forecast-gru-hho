@@ -13,6 +13,7 @@ import {
   Legend,
   TimeScale,
   ChartData,
+  ChartOptions,
 } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 
@@ -295,7 +296,7 @@ export default function Home() {
     </div>
   );
 
-  const chartOptions = useMemo(() => {
+  const chartOptions: ChartOptions<'line'> = useMemo(() => {
     const gridColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
     const textColor = theme === 'dark' ? '#E5E7EB' : '#1F2937';
 
