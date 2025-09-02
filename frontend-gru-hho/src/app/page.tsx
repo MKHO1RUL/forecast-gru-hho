@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, ChangeEvent } from 'react';
+import { useState, useRef, ChangeEvent, useEffect, useMemo } from 'react';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -37,6 +37,8 @@ interface PredictionData {
   value: number;
 }
 
+type Theme = 'light' | 'dark';
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState<string>('');
@@ -48,6 +50,7 @@ export default function Home() {
   const [isTesting, setIsTesting] = useState<boolean>(false);
   const [isPredicting, setIsPredicting] = useState<boolean>(false);
   const [isTrained, setIsTrained] = useState<boolean>(false);
+  const [theme, setTheme] = useState<Theme>('light');
   const [plotData, setPlotData] = useState<ChartData<'line'>>({ datasets: [] });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -61,6 +64,16 @@ export default function Home() {
     iterasi: '10',
     n_hari: '7',
   });
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+  }, [theme]);
+
 
   const handleParamChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -252,11 +265,24 @@ export default function Home() {
     }
   };
 
+  // Reusable Components
+  const Card = ({ title, children, className }: { title: string, children: React.ReactNode, className?: string }) => (
+    <div className={`bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 ${className}`}>
+      <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">{title}</h3>
+      {children}
+    </div>
+  );
+
   const ParamInput = ({ label, name, value, tooltip }: { label: string, name: string, value: string, tooltip: string }) => (
-    <div className="grid grid-cols-2 items-center gap-2 mb-2">
-      <label htmlFor={name} className="text-sm font-medium flex items-center">
+    <div>
+      <label htmlFor={name} className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center mb-1">
         {label}
-        <span className="ml-1 text-blue-500 cursor-pointer" title={tooltip}>(?)</span>
+        <span className="ml-1.5 text-gray-400 dark:text-gray-500 cursor-pointer group relative">
+          <InfoIcon />
+          <span className="absolute bottom-full mb-2 w-48 p-2 bg-gray-700 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+            {tooltip}
+          </span>
+        </span>
       </label>
       <input
         type="text"
@@ -264,137 +290,164 @@ export default function Home() {
         name={name}
         value={value}
         onChange={handleParamChange}
-        className="p-1 border rounded-md text-sm"
+        className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
       />
     </div>
   );
 
+  const chartOptions = useMemo(() => {
+    const gridColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+    const textColor = theme === 'dark' ? '#E5E7EB' : '#1F2937';
+
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top' as const, labels: { color: textColor } },
+        title: { display: true, text: 'GBP/IDR Forex Prediction using GRU-HHO', color: textColor, font: { size: 16 } },
+      },
+      scales: {
+        x: {
+          type: 'time' as const,
+          time: { unit: 'day', tooltipFormat: 'dd/MM/yyyy' },
+          title: { display: true, text: 'Date', color: textColor },
+          ticks: { color: textColor },
+          grid: { color: gridColor },
+        },
+        y: {
+          title: { display: true, text: 'GBP/IDR Forex Price', color: textColor },
+          ticks: { color: textColor },
+          grid: { color: gridColor },
+        },
+      },
+    };
+  }, [theme]);
+
+
   return (
-    <main className="flex flex-col h-screen bg-gray-100 text-gray-900">
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left Pane: Data Display */}
-        <div className="w-1/4 p-4 flex flex-col border-r bg-white">
-          <h2 className="text-lg font-bold text-center mb-2">Input Data</h2>
-          <div className="flex-1 overflow-y-auto border rounded-lg">
-            <table className="w-full text-sm text-left">
-              <thead className="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
-                <tr>
-                  <th scope="col" className="px-2 py-2">No</th>
-                  <th scope="col" className="px-2 py-2">Date</th>
-                  <th scope="col" className="px-2 py-2">Price</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tableData.map((row, index) => (
-                  <tr key={index} className="bg-white border-b">
-                    <td className="px-2 py-1">{index + 1}</td>
-                    <td className="px-2 py-1">{row.Tanggal}</td>
-                    <td className="px-2 py-1">{row.Terakhir.toLocaleString('id-ID')}</td>
-                  </tr>
+    <div className="min-h-screen">
+      <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-20">
+        <div className="container mx-auto px-6 py-3 flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">GRU-HHO Forex Prediction</h1>
+          <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700">
+            {theme === 'light' ? <MoonIcon /> : <SunIcon />}
+          </button>
+        </div>
+      </header>
+
+      <main className="container mx-auto p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column */}
+          <div className="lg:col-span-1 flex flex-col gap-6">
+            <Card title="1. Load Data">
+              <div className="flex items-center gap-2">
+                <input type="text" readOnly value={fileName} className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-gray-100 dark:bg-gray-700" placeholder="No file selected" />
+                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold whitespace-nowrap">Browse</button>
+                <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".csv" />
+              </div>
+            </Card>
+
+            <Card title="2. Set Parameters">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <ParamInput label="Hidden Units" name="jml_hdnunt" value={params.jml_hdnunt} tooltip="Number of units in the GRU hidden layer. Must be an integer > 1." />
+                <ParamInput label="MSE Threshold" name="batas_MSE" value={params.batas_MSE} tooltip="Mean Squared Error target for stopping training. Must be a float between 0 and 1." />
+                <ParamInput label="Batch Size" name="batch_size" value={params.batch_size} tooltip={`Number of samples per gradient update. Must be > 0 and <= ${maxBatchSize || 'N/A'}.`} />
+                <ParamInput label="Max Epochs" name="maks_epoch" value={params.maks_epoch} tooltip="Maximum number of training epochs. Must be an integer > 0." />
+                <ParamInput label="Hawks (HHO)" name="elang" value={params.elang} tooltip="Number of hawks in the Harris Hawks Optimization. Must be an integer > 1." />
+                <ParamInput label="Iterations (HHO)" name="iterasi" value={params.iterasi} tooltip="Number of iterations for the HHO algorithm. Must be an integer > 0." />
+                <ParamInput label="Prediction Days" name="n_hari" value={params.n_hari} tooltip="Number of future days to predict. Must be an integer > 0." />
+              </div>
+            </Card>
+
+            <Card title="3. Run Model">
+              <div className="flex flex-col space-y-3">
+                <ActionButton onClick={handleTrain} disabled={isTraining || !file} isLoading={isTraining} text="Train Model" />
+                <ActionButton onClick={handleTest} disabled={isTesting || !isTrained} isLoading={isTesting} text="Test Model" />
+                <ActionButton onClick={handlePredict} disabled={isPredicting || !isTrained} isLoading={isPredicting} text="Predict Future" />
+              </div>
+              <div className="mt-4 h-8 text-sm text-center italic text-gray-600 dark:text-gray-400">{status}</div>
+            </Card>
+
+            <Card title="Output Log" className="lg:max-h-96 flex flex-col">
+              <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-3 rounded-md font-mono text-xs">
+                {outputLog.map((line, index) => (
+                  <p key={index} className={line.toLowerCase().includes('error') ? 'text-red-500' : line.includes('complete') ? 'text-green-500' : ''}>
+                    <span className="text-gray-400 mr-2">{`[${index + 1}]`}</span>{line}
+                  </p>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Middle Pane: Controls */}
-        <div className="w-1/2 p-4 flex flex-col items-center bg-white overflow-y-auto">
-          <h1 className="text-2xl font-bold text-center my-4">GRU-HHO Forex Prediction</h1>
-          <div className="w-full max-w-md mb-4">
-            <div className="flex items-center">
-              <label htmlFor="file-upload" className="text-sm font-medium mr-2">CSV File:</label>
-              <input
-                type="text"
-                readOnly
-                value={fileName}
-                className="p-1 border rounded-md flex-grow text-sm"
-                placeholder="No file selected"
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="ml-2 px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm font-bold"
-              >
-                Browse
-              </button>
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                className="hidden"
-                accept=".csv"
-              />
-            </div>
-          </div>
-
-          <div className="border rounded-lg p-4 w-full max-w-md mb-4">
-            <h3 className="font-bold mb-2 text-center">Parameters</h3>
-            <div className="grid grid-cols-2 gap-x-4">
-              <div>
-                <ParamInput label="Hidden Units:" name="jml_hdnunt" value={params.jml_hdnunt} tooltip="Must be an integer > 1" />
-                <ParamInput label="MSE Threshold:" name="batas_MSE" value={params.batas_MSE} tooltip="Must be a float between 0 and 1" />
-                <ParamInput label="Batch Size:" name="batch_size" value={params.batch_size} tooltip={`Must be > 0 and <= ${maxBatchSize || 'N/A'}`} />
-                <ParamInput label="Epochs:" name="maks_epoch" value={params.maks_epoch} tooltip="Must be an integer > 0" />
               </div>
-              <div>
-                <ParamInput label="Hawks:" name="elang" value={params.elang} tooltip="Must be an integer > 1" />
-                <ParamInput label="Iterations:" name="iterasi" value={params.iterasi} tooltip="Must be an integer > 0" />
-                <ParamInput label="Prediction Days:" name="n_hari" value={params.n_hari} tooltip="Must be an integer > 0" />
+            </Card>
+          </div>
+
+          {/* Right Column */}
+          <div className="lg:col-span-2 flex flex-col gap-6">
+            <Card title="Data Preview" className="max-h-[450px] flex flex-col">
+              <div className="flex-1 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs text-gray-700 dark:text-gray-300 uppercase bg-gray-50 dark:bg-gray-700 sticky top-0">
+                    <tr>
+                      <th scope="col" className="px-4 py-2">No</th>
+                      <th scope="col" className="px-4 py-2">Date</th>
+                      <th scope="col" className="px-4 py-2 text-right">Price (IDR)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                    {tableData.map((row, index) => (
+                      <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td className="px-4 py-1.5">{index + 1}</td>
+                        <td className="px-4 py-1.5">{row.Tanggal}</td>
+                        <td className="px-4 py-1.5 text-right">{row.Terakhir.toLocaleString('id-ID')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
-          </div>
+            </Card>
 
-          <div className="flex space-x-2 mb-4">
-            <button onClick={handleTrain} disabled={isTraining || !file} className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 disabled:bg-gray-400 font-bold">Train</button>
-            <button onClick={handleTest} disabled={isTesting || !isTrained} className="px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 disabled:bg-gray-400 font-bold">Test</button>
-            <button onClick={handlePredict} disabled={isPredicting || !isTrained} className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 disabled:bg-gray-400 font-bold">Predict</button>
-            <button disabled className="px-4 py-2 bg-gray-500 text-white rounded-md disabled:bg-gray-400 font-bold">Export CSV</button>
-          </div>
-          <div className="h-6 text-sm italic text-gray-600">{status}</div>
-        </div>
-
-        {/* Right Pane: Output Log */}
-        <div className="w-1/4 p-4 flex flex-col border-l bg-white">
-          <h2 className="text-lg font-bold text-center mb-2">Output Log</h2>
-          <div className="flex-1 overflow-y-auto border rounded-lg p-2 bg-gray-50 text-sm">
-            {outputLog.map((line, index) => (
-              <p key={index} className={line.includes('complete') ? 'text-green-600' : ''}>{line}</p>
-            ))}
+            <Card title="Prediction Chart" className="h-[500px]">
+              <div className="w-full h-full relative">
+                <Line data={plotData} options={chartOptions} />
+              </div>
+            </Card>
           </div>
         </div>
-      </div>
-
-      <div className="flex-1 flex overflow-hidden p-4">
-        {/* Bottom Pane: Plot */}
-        <div className="w-full p-4 flex flex-col bg-white">
-          <h2 className="text-lg font-bold text-center mb-2">Plot</h2>
-          <div className="flex-1 relative">
-            <Line
-              data={plotData}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                  legend: { position: 'top' },
-                  title: { display: true, text: 'GBP/IDR Forex Prediction using GRU-HHO' },
-                },
-                scales: {
-                  x: {
-                    type: 'time',
-                    time: {
-                      unit: 'day',
-                      tooltipFormat: 'dd/MM/yyyy',
-                    },
-                    title: { display: true, text: 'Date' },
-                  },
-                  y: {
-                    title: { display: true, text: 'GBP/IDR Forex Price' },
-                  },
-                },
-              }}
-            />
-          </div>
-        </div>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }
+
+// Helper Components & Icons
+const ActionButton = ({ onClick, disabled, isLoading, text }: { onClick: () => void, disabled: boolean, isLoading: boolean, text: string }) => (
+  <button
+    onClick={onClick}
+    disabled={disabled || isLoading}
+    className="w-full flex justify-center items-center px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 dark:disabled:bg-gray-600 font-bold transition-colors"
+  >
+    {isLoading ? <SpinnerIcon /> : text}
+  </button>
+);
+
+const SpinnerIcon = () => (
+  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+  </svg>
+);
+
+const InfoIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
+const SunIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+  </svg>
+);
+
+const MoonIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+  </svg>
+);
