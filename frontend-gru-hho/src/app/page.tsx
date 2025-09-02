@@ -57,12 +57,12 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [params, setParams] = useState({
-    jml_hdnunt: '10',
+    jml_hdnunt: '4',
     batas_MSE: '0.001',
     batch_size: '32',
-    maks_epoch: '100',
-    elang: '10',
-    iterasi: '50',
+    maks_epoch: '10',
+    elang: '5',
+    iterasi: '10',
     n_hari: '7',
   });
 
@@ -93,7 +93,7 @@ export default function Home() {
     setOutputLog(prev => [...prev, 'Uploading and processing data...']);
 
     try {
-      const res = await fetch('http://localhost:8000/upload', {
+      const res = await fetch('https://rh3magz7.up.railway.app/upload', {
         method: 'POST',
         body: formData,
       });
@@ -131,7 +131,7 @@ export default function Home() {
         iterasi: parseInt(params.iterasi),
       };
 
-      const res = await fetch('http://localhost:8000/train', {
+      const res = await fetch('https://rh3magz7.up.railway.app/train', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(trainingParams),
@@ -161,7 +161,7 @@ export default function Home() {
     setOutputLog(prev => [...prev, 'Testing started...']);
 
     try {
-      const res = await fetch('http://localhost:8000/test');
+      const res = await fetch('https://rh3magz7.up.railway.app/test');
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.detail || 'Testing failed.');
@@ -204,7 +204,7 @@ export default function Home() {
     setOutputLog(prev => [...prev, 'Prediction started...']);
 
     try {
-      const res = await fetch(`http://localhost:8000/predict?n_hari=${params.n_hari}`);
+      const res = await fetch(`https://rh3magz7.up.railway.app/predict?n_hari=${params.n_hari}`);
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.detail || 'Prediction failed.');
