@@ -170,12 +170,12 @@ export default function Home() {
       setOutputLog(prev => [...prev, `Testing complete! MSE: ${data.mse}`]);
 
       const testingDataPoints = data.testing_data.dates.map((date: string, index: number) => ({
-        x: date,
+        x: new Date(date).getTime(),
         y: data.testing_data.values[index],
       }));
 
       const predictionDataPoints = data.prediction_data.dates.map((date: string, index: number) => ({
-        x: date,
+        x: new Date(date).getTime(),
         y: data.prediction_data.values[index],
       }));
 
@@ -234,7 +234,7 @@ export default function Home() {
 
         newDatasets.push({
           label: `Prediction (${params.n_hari} days)`,
-          data: futurePredictions.map(p => ({ x: p.date, y: p.value })),
+          data: futurePredictions.map(p => ({ x: new Date(p.date).getTime(), y: p.value })),
           borderColor: 'red',
           borderDash: [5, 5],
           tension: 0.1,
