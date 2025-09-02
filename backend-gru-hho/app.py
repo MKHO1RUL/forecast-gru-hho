@@ -9,7 +9,9 @@ from model import DataPreprocessing, GRUHHO
 
 app = FastAPI()
 
-origins = ["*"]
+origins = [
+    "https://mkii-forecast.vercel.app",
+]
 
 app.add_middleware(
     CORSMiddleware,
@@ -158,7 +160,4 @@ async def predict_future(n_hari: int = Query(..., gt=0)):
 
 if __name__ == "__main__":
     import uvicorn
-    import os
-
-    port = int(os.environ.get("PORT", 8000)) 
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=8080)

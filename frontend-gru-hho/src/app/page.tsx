@@ -89,7 +89,7 @@ export default function Home() {
     setOutputLog(prev => [...prev, 'Uploading and processing data...']);
 
     try {
-      const res = await fetch('https://forecast-gru-hho-production.up.railway.app/upload', {
+      const res = await fetch('https://rh3magz7.up.railway.app/upload', {
         method: 'POST',
         body: formData,
       });
@@ -128,7 +128,7 @@ export default function Home() {
         iterasi: parseInt(params.iterasi),
       };
 
-      const res = await fetch('https://forecast-gru-hho-production.up.railway.app/train', {
+      const res = await fetch('https://rh3magz7.up.railway.app/train', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(trainingParams),
@@ -159,7 +159,7 @@ export default function Home() {
     setOutputLog(prev => [...prev, 'Testing started...']);
 
     try {
-      const res = await fetch('https://forecast-gru-hho-production.up.railway.app/test');
+      const res = await fetch('https://rh3magz7.up.railway.app/test');
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.detail || 'Testing failed.');
@@ -212,7 +212,7 @@ export default function Home() {
     setOutputLog(prev => [...prev, 'Prediction started...']);
 
     try {
-      const res = await fetch(`https://forecast-gru-hho-production.up.railway.app/predict?n_hari=${params.n_hari}`);
+      const res = await fetch(`https://rh3magz7.up.railway.app/predict?n_hari=${params.n_hari}`);
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.detail || 'Prediction failed.');
