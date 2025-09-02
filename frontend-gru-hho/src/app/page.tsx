@@ -12,6 +12,7 @@ import {
   Tooltip,
   Legend,
   TimeScale,
+  ChartData,
 } from 'chart.js';
 import 'chartjs-adapter-date-fns';
 
@@ -31,11 +32,6 @@ interface DataPoint {
   Terakhir: number;
 }
 
-interface PlotData {
-  dates: string[];
-  values: number[];
-}
-
 interface PredictionData {
   date: string;
   value: number;
@@ -52,7 +48,7 @@ export default function Home() {
   const [isTesting, setIsTesting] = useState<boolean>(false);
   const [isPredicting, setIsPredicting] = useState<boolean>(false);
   const [isTrained, setIsTrained] = useState<boolean>(false);
-  const [plotData, setPlotData] = useState<any>({ datasets: [] });
+  const [plotData, setPlotData] = useState<ChartData<'line'>>({ datasets: [] });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -171,18 +167,27 @@ export default function Home() {
       setStatus('Testing complete.');
       setOutputLog(prev => [...prev, `Testing complete! MSE: ${data.mse}`]);
 
+      const testingDataPoints = data.testing_data.dates.map((date: string, index: number) => ({
+        x: date,
+        y: data.testing_data.values[index],
+      }));
+
+      const predictionDataPoints = data.prediction_data.dates.map((date: string, index: number) => ({
+        x: date,
+        y: data.prediction_data.values[index],
+      }));
+
       setPlotData({
-        labels: data.testing_data.dates,
         datasets: [
           {
             label: 'Testing Data',
-            data: data.testing_data.values,
+            data: testingDataPoints,
             borderColor: 'green',
             tension: 0.1,
           },
           {
             label: 'Testing Prediction',
-            data: data.prediction_data.values,
+            data: predictionDataPoints,
             borderColor: 'orange',
             tension: 0.1,
           },
@@ -216,10 +221,10 @@ export default function Home() {
 
       const futurePredictions: PredictionData[] = data.predictions;
 
-      setPlotData((prevData: any) => {
+      setPlotData((prevData) => {
         const newDatasets = [...prevData.datasets];
         // Remove old prediction if it exists
-        const existingPredIndex = newDatasets.findIndex((ds: any) => ds.label.startsWith('Prediction'));
+        const existingPredIndex = newDatasets.findIndex((ds) => ds.label?.startsWith('Prediction ('));
         if (existingPredIndex > -1) {
           newDatasets.splice(existingPredIndex, 1);
         }
@@ -231,7 +236,7 @@ export default function Home() {
           borderDash: [5, 5],
           tension: 0.1,
         });
-        return { ...prevData, datasets: newDatasets };
+        return { datasets: newDatasets };
       });
 
     } catch (error: any) {
