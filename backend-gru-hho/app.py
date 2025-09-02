@@ -10,7 +10,7 @@ from model import DataPreprocessing, GRUHHO
 app = FastAPI()
 
 origins = [
-    "https://mkii-forecast.vercel.app/",
+    "https://mkii-forecast.vercel.app",
     "http://localhost:3000",
 ]
 
