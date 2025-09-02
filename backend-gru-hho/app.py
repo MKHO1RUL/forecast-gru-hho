@@ -9,10 +9,10 @@ from model import DataPreprocessing, GRUHHO
 
 app = FastAPI()
 
-# Konfigurasi CORS
 origins = [
-    "http://localhost:3000",  # Next.js dev server
-    # Tambahkan URL frontend production Anda di sini nanti
+    "https://mkii-forecast.vercel.app/",  # URL Frontend Produksi Anda
+    "http://localhost:3000",             # Untuk development lokal Next.js
+    # Jika Anda menggunakan Vercel Preview, tambahkan URL preview di sini
 ]
 
 app.add_middleware(
@@ -23,7 +23,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# State global untuk menyimpan model dan preprocessor
 model_state = {
     "preprocessor": None,
     "model": None,
@@ -53,7 +52,7 @@ async def upload_data(file: UploadFile = File(...)):
         model_state["preprocessor"] = preprocessor
         model_state["pola_training"] = preprocessor.create_pola(preprocessor.train_data)
         model_state["pola_testing"] = preprocessor.create_pola(preprocessor.test_data)
-        model_state["model"] = None # Reset model jika ada data baru
+        model_state["model"] = None 
         model_state["test_results"] = None
         model_state["future_predictions"] = None
         
