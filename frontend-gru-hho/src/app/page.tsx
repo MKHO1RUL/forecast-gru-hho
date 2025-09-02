@@ -105,10 +105,11 @@ export default function Home() {
       setStatus('Data loaded successfully.');
       setOutputLog(prev => [...prev, 'Data loaded successfully.']);
       setIsTrained(false);
-    } catch (error: any) {
-      setStatus(`Error: ${error.message}`);
-      setOutputLog(prev => [...prev, `Error: ${error.message}`]);
-      alert(`Error: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred during upload.';
+      setStatus(`Error: ${errorMessage}`);
+      setOutputLog(prev => [...prev, `Error: ${errorMessage}`]);
+      alert(`Error: ${errorMessage}`);
     }
   };
 
@@ -142,10 +143,11 @@ export default function Home() {
       setStatus('Training complete!');
       setOutputLog(prev => [...prev, ...data.training_log, `Training complete! Best MSE: ${data.best_mse}`]);
       setIsTrained(true);
-    } catch (error: any) {
-      setStatus(`Error: ${error.message}`);
-      setOutputLog(prev => [...prev, `Error: ${error.message}`]);
-      alert(`Error: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred during training.';
+      setStatus(`Error: ${errorMessage}`);
+      setOutputLog(prev => [...prev, `Error: ${errorMessage}`]);
+      alert(`Error: ${errorMessage}`);
     } finally {
       setIsTraining(false);
     }
@@ -194,10 +196,11 @@ export default function Home() {
         ],
       });
 
-    } catch (error: any) {
-      setStatus(`Error: ${error.message}`);
-      setOutputLog(prev => [...prev, `Error: ${error.message}`]);
-      alert(`Error: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred during testing.';
+      setStatus(`Error: ${errorMessage}`);
+      setOutputLog(prev => [...prev, `Error: ${errorMessage}`]);
+      alert(`Error: ${errorMessage}`);
     } finally {
       setIsTesting(false);
     }
@@ -239,10 +242,11 @@ export default function Home() {
         return { datasets: newDatasets };
       });
 
-    } catch (error: any) {
-      setStatus(`Error: ${error.message}`);
-      setOutputLog(prev => [...prev, `Error: ${error.message}`]);
-      alert(`Error: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred during prediction.';
+      setStatus(`Error: ${errorMessage}`);
+      setOutputLog(prev => [...prev, `Error: ${errorMessage}`]);
+      alert(`Error: ${errorMessage}`);
     } finally {
       setIsPredicting(false);
     }
