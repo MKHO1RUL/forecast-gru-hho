@@ -270,7 +270,7 @@ export default function Home() {
   );
 
   return (
-    <main className="flex flex-col h-screen bg-gray-100">
+    <main className="flex flex-col h-screen bg-gray-100 text-gray-900">
       <div className="flex flex-1 overflow-hidden">
         {/* Left Pane: Data Display */}
         <div className="w-1/4 p-4 flex flex-col border-r bg-white">
