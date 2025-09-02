@@ -10,9 +10,8 @@ from model import DataPreprocessing, GRUHHO
 app = FastAPI()
 
 origins = [
-    "https://mkii-forecast.vercel.app/",  # URL Frontend Produksi Anda
-    "http://localhost:3000",             # Untuk development lokal Next.js
-    # Jika Anda menggunakan Vercel Preview, tambahkan URL preview di sini
+    "https://mkii-forecast.vercel.app/",
+    "http://localhost:3000",
 ]
 
 app.add_middleware(
