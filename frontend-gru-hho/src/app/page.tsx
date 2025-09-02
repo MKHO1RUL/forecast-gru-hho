@@ -298,7 +298,7 @@ export default function Home() {
         </div>
 
         {/* Middle Pane: Controls */}
-        <div className="w-1/2 p-4 flex flex-col items-center bg-white">
+        <div className="w-1/2 p-4 flex flex-col items-center bg-white overflow-y-auto">
           <h1 className="text-2xl font-bold text-center my-4">GRU-HHO Forex Prediction</h1>
           <div className="w-full max-w-md mb-4">
             <div className="flex items-center">
