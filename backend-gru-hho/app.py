@@ -56,7 +56,7 @@ async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
     now = datetime.now()
     
     # 1. Cek cache
-    if pair in cache and cache[pair]["last_updated"].date() == now.date():
+    if pair in cache and cache[pair].get("data") is not None and cache[pair]["last_updated"].date() == now.date():
         print(f"Menggunakan data dari cache untuk {pair}")
         df = cache[pair]["data"]
     else:
@@ -77,6 +77,8 @@ async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
             cache[pair] = {"data": df, "last_updated": now}
         except Exception as e:
             traceback.print_exc()
+            # PERBAIKAN: Jangan gunakan list sebagai key. Simpan error di bawah key 'pair'.
+            cache[pair] = {"data": None, "last_updated": now, "error": str(e)}
             raise HTTPException(status_code=500, detail=f"Gagal mengambil data dari yfinance: {str(e)}")
 
     # 4. Simpan ke file agar bisa digunakan oleh endpoint lain
@@ -96,7 +98,7 @@ async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
     return {
         "message": f"Data untuk {pair} berhasil dimuat.",
         "data": df_display.to_dict(orient='records'),
-        "max_batch_size": int(len(df) * 0.8)  # Estimasi, nilai pasti akan ada setelah training
+        "max_batch_size": int(len(df) * 0.8) 
     }
 
 @app.post("/train")
