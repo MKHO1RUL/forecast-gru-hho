@@ -100,9 +100,9 @@ async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
     })
 
     return {
-        "message": f"Data untuk {pair} berhasil dimuat.",
+        "message": f"VERSI BARU SUDAH LIVE v2 - Data untuk {pair} berhasil dimuat.",
         "data": df_display.to_dict(orient='records'),
-        "max_batch_size": int(len(df) * 0.7) # Disesuaikan dengan train_percent di DataPreprocessing
+        "max_batch_size": int(len(df) * 0.7)
     }
 
 @app.post("/train")
