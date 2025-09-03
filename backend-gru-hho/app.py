@@ -63,6 +63,8 @@ async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
         # Ambil dari yfinance jika tidak ada di cache atau usang
         print(f"Mengambil data baru untuk {pair} dari yfinance...")
         try:
+            # The FutureWarning indicates auto_adjust is now True by default, so explicitly setting it might not be needed
+            # but keeping it doesn't hurt.
             data = yf.download(pair, period="5y", interval="1d", progress=False, auto_adjust=True)
             
             if data.empty:
@@ -77,7 +79,8 @@ async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
             cache[pair] = {"data": df, "last_updated": now}
 
         except Exception as e:
-            traceback.print_exc()
+            traceback.print_exc() # Prints the full traceback to stderr/logs
+            print(f"Detailed yfinance error for {pair}: {e}") # Added for more specific error message in logs
             cache[pair] = {"data": None, "last_updated": now, "error": str(e)}
             raise HTTPException(status_code=500, detail=f"Gagal mengambil data dari yfinance: {str(e)}")
 
