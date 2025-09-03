@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, ChangeEvent, useEffect, useMemo } from 'react';
+import { useState, ChangeEvent, useEffect, useMemo } from 'react';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -40,12 +40,16 @@ interface PredictionData {
 
 type Theme = 'light' | 'dark';
 
+const FOREX_PAIRS = [
+  "EURUSD=X", "GBPUSD=X", "USDJPY=X", "GBPJPY=X", "AUDUSD=X", "USDCAD=X", "USDCHF=X", "NZDUSD=X"
+];
+
 export default function Home() {
-  const [file, setFile] = useState<File | null>(null);
-  const [fileName, setFileName] = useState<string>('');
+  const [selectedPair, setSelectedPair] = useState<string>(FOREX_PAIRS[0]);
+  const [isLoadingData, setIsLoadingData] = useState<boolean>(false);
   const [tableData, setTableData] = useState<DataPoint[]>([]);
   const [maxBatchSize, setMaxBatchSize] = useState<number>(0);
-  const [status, setStatus] = useState<string>('Please load a CSV file to begin.');
+  const [status, setStatus] = useState<string>('Please select a forex pair and load the data.');
   const [outputLog, setOutputLog] = useState<string[]>([]);
   const [isTraining, setIsTraining] = useState<boolean>(false);
   const [isTesting, setIsTesting] = useState<boolean>(false);
@@ -54,12 +58,10 @@ export default function Home() {
   const [theme, setTheme] = useState<Theme>('light');
   const [plotData, setPlotData] = useState<ChartData<'line'>>({ datasets: [] });
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const [params, setParams] = useState({
     jml_hdnunt: '4',
     batas_MSE: '0.001',
-    batch_size: '32',
+    batch_size: '8',
     maks_epoch: '10',
     elang: '5',
     iterasi: '10',
@@ -76,54 +78,61 @@ export default function Home() {
   }, [theme]);
 
 
-  const handleParamChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleParamChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setParams(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const selectedFile = e.target.files[0];
-      setFile(selectedFile);
-      setFileName(selectedFile.name);
-      handleUpload(selectedFile);
-    }
-  };
-
-  const handleUpload = async (selectedFile: File) => {
-    if (!selectedFile) {
-      alert('Please select a file first.');
+  const handleLoadData = async () => {
+    if (!selectedPair) {
+      alert('Please select a forex pair.');
       return;
     }
 
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-
-    setStatus('Uploading and processing data...');
-    setOutputLog(prev => [...prev, 'Uploading and processing data...']);
+    setIsLoadingData(true);
+    setStatus(`Loading data for ${selectedPair}...`);
+    setOutputLog(prev => [...prev, `Fetching 5-year historical data for ${selectedPair}...`]);
+    setTableData([]);
+    setPlotData({ datasets: [] });
+    setIsTrained(false);
 
     try {
-      const res = await fetch('https://forecast-gru-hho-production.up.railway.app/upload', {
-        method: 'POST',
-        body: formData,
-      });
+      const res = await fetch(`https://forecast-gru-hho-production.up.railway.app/get-data?pair=${selectedPair}`);
 
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.detail || 'Failed to upload file.');
+        throw new Error(errorData.detail || `Failed to load data for ${selectedPair}.`);
       }
 
       const data = await res.json();
       setTableData(data.data);
       setMaxBatchSize(data.max_batch_size);
       setStatus('Data loaded successfully.');
-      setOutputLog(prev => [...prev, 'Data loaded successfully.']);
-      setIsTrained(false);
+      setOutputLog(prev => [...prev, 'Data loaded successfully. Ready for training.']);
+      
+      const initialDataPoints = data.data.map((point: DataPoint) => ({
+        x: new Date(point.Tanggal).getTime(),
+        y: point.Terakhir,
+      }));
+
+      setPlotData({
+        datasets: [
+          {
+            label: 'Historical Data',
+            data: initialDataPoints,
+            borderColor: 'blue',
+            tension: 0.1,
+          },
+        ],
+      });
+
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred during upload.';
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred during data fetching.';
       setStatus(`Error: ${errorMessage}`);
       setOutputLog(prev => [...prev, `Error: ${errorMessage}`]);
       alert(`Error: ${errorMessage}`);
+    } finally {
+      setIsLoadingData(false);
     }
   };
 
@@ -338,13 +347,22 @@ export default function Home() {
 
       <main className="container mx-auto p-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column */}
           <div className="lg:col-span-1 flex flex-col gap-6">
-            <Card title="1. Load Data">
+            <Card title="1. Select Forex Pair">
               <div className="flex items-center gap-2">
-                <input type="text" readOnly value={fileName} className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-gray-100 dark:bg-gray-700" placeholder="No file selected" />
-                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold whitespace-nowrap">Browse</button>
-                <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".csv" />
+                <select
+                  name="selectedPair"
+                  value={selectedPair}
+                  onChange={(e) => setSelectedPair(e.target.value)}
+                  className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  {FOREX_PAIRS.map(pair => (
+                    <option key={pair} value={pair}>{pair.replace('=X', '')}</option>
+                  ))}
+                </select>
+                <button onClick={handleLoadData} disabled={isLoadingData || isTraining} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold whitespace-nowrap disabled:bg-gray-400 dark:disabled:bg-gray-600">
+                  {isLoadingData ? <SpinnerIcon /> : 'Load Data'}
+                </button>
               </div>
             </Card>
 
@@ -362,7 +380,7 @@ export default function Home() {
 
             <Card title="3. Run Model">
               <div className="flex flex-col space-y-3">
-                <ActionButton onClick={handleTrain} disabled={isTraining || !file} isLoading={isTraining} text="Train Model" />
+                <ActionButton onClick={handleTrain} disabled={isTraining || tableData.length === 0} isLoading={isTraining} text="Train Model" />
                 <ActionButton onClick={handleTest} disabled={isTesting || !isTrained} isLoading={isTesting} text="Test Model" />
                 <ActionButton onClick={handlePredict} disabled={isPredicting || !isTrained} isLoading={isPredicting} text="Predict Future" />
               </div>
@@ -380,7 +398,6 @@ export default function Home() {
             </Card>
           </div>
 
-          {/* Right Column */}
           <div className="lg:col-span-2 flex flex-col gap-6">
             <Card title="Data Preview" className="max-h-[450px] flex flex-col">
               <div className="flex-1 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">

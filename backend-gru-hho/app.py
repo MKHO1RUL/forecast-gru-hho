@@ -4,13 +4,17 @@ from pydantic import BaseModel
 import pandas as pd
 import io
 import traceback
+import yfinance as yf
+from datetime import datetime
 
 from model import DataPreprocessing, GRUHHO
 
 app = FastAPI()
 
 origins = [
-    "https://mkii-forecast.vercel.app",
+    "http://localhost:3000",
+    "https://mkii-forecast.vercel.app", # Ganti dengan URL frontend Anda
+    "https://forecast-gru-hho-production.up.railway.app" # Ganti dengan URL backend Anda jika berbeda
 ]
 
 app.add_middleware(
@@ -20,6 +24,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# In-memory cache untuk data yfinance
+# Struktur: { "PAIR": { "data": pd.DataFrame, "last_updated": datetime } }
+cache = {}
 
 model_state = {
     "preprocessor": None,
@@ -39,40 +47,74 @@ class TrainingParams(BaseModel):
     elang: int
     iterasi: int
 
-@app.post("/upload")
-async def upload_data(file: UploadFile = File(...)):
+@app.get("/get-data")
+async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
+    """
+    Mengambil data forex dari yfinance dengan caching.
+    Data yang diambil disimpan ke 'data.csv' untuk digunakan oleh endpoint lain.
+    """
+    now = datetime.now()
+    
+    # 1. Cek cache
+    if pair in cache and cache[pair]["last_updated"].date() == now.date():
+        print(f"Menggunakan data dari cache untuk {pair}")
+        df = cache[pair]["data"]
+    else:
+        # 2. Ambil dari yfinance jika tidak ada di cache atau sudah usang
+        print(f"Mengambil data baru untuk {pair} dari yfinance...")
+        try:
+            data = yf.download(pair, period="5y", interval="1d", progress=False)
+            
+            if data.empty:
+                raise HTTPException(status_code=404, detail=f"Tidak ada data untuk pair: {pair}. Mungkin ticker tidak valid.")
+            
+            # Proses DataFrame
+            df = data[['Close']].dropna()
+            df.index.name = 'Tanggal'
+            df.rename(columns={'Close': 'Terakhir'}, inplace=True)
+            
+            # 3. Update cache
+            cache[pair] = {"data": df, "last_updated": now}
+        except Exception as e:
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=f"Gagal mengambil data dari yfinance: {str(e)}")
+
+    # 4. Simpan ke file agar bisa digunakan oleh endpoint lain
+    df.to_csv('data.csv')
+
+    # 5. Siapkan data untuk pratinjau di frontend
+    df_display = df.reset_index()
+    df_display['Tanggal'] = pd.to_datetime(df_display['Tanggal']).dt.strftime('%Y-%m-%d')
+
+    # Reset state model setiap kali data baru dimuat
+    model_state.update({
+        "preprocessor": None, "model": None, "pola_training": None,
+        "pola_testing": None, "training_log": [], "test_results": None,
+        "future_predictions": None
+    })
+
+    return {
+        "message": f"Data untuk {pair} berhasil dimuat.",
+        "data": df_display.to_dict(orient='records'),
+        "max_batch_size": int(len(df) * 0.8)  # Estimasi, nilai pasti akan ada setelah training
+    }
+
+@app.post("/train")
+async def train_model(params: TrainingParams):
     try:
-        contents = await file.read()
+        # Baca data dari file yang disimpan oleh /get-data
+        with open('data.csv', 'rb') as f:
+            contents = f.read()
         
         preprocessor = DataPreprocessing()
+        # PENTING: Pastikan method load_and_preprocess dapat menangani format tanggal 'YYYY-MM-DD'
+        # dari yfinance, bukan 'DD/MM/YYYY'. Mungkin perlu penyesuaian di class DataPreprocessing.
         preprocessor.load_and_preprocess(io.BytesIO(contents))
         
         model_state["preprocessor"] = preprocessor
         model_state["pola_training"] = preprocessor.create_pola(preprocessor.train_data)
         model_state["pola_testing"] = preprocessor.create_pola(preprocessor.test_data)
-        model_state["model"] = None 
-        model_state["test_results"] = None
-        model_state["future_predictions"] = None
-        
-        df_display = preprocessor.df[['Tanggal', 'Terakhir']].copy()
-        df_display['Tanggal'] = pd.to_datetime(df_display['Tanggal'], dayfirst=True).dt.strftime('%d/%m/%Y')
 
-        return {
-            "message": "Data loaded and preprocessed successfully.",
-            "filename": file.filename,
-            "data": df_display.to_dict(orient='records'),
-            "max_batch_size": len(model_state["pola_training"])
-        }
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
-
-@app.post("/train")
-async def train_model(params: TrainingParams):
-    if not model_state["preprocessor"]:
-        raise HTTPException(status_code=400, detail="Data not loaded yet. Please upload a file first.")
-
-    try:
         model = GRUHHO(
             jml_hdnunt=params.jml_hdnunt,
             batas_MSE=params.batas_MSE,
@@ -92,6 +134,8 @@ async def train_model(params: TrainingParams):
             "best_mse": best_mse[1],
             "training_log": model.training_log
         }
+    except FileNotFoundError:
+        raise HTTPException(status_code=400, detail="Data tidak ditemukan. Silakan muat data melalui endpoint /get-data terlebih dahulu.")
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error during training: {str(e)}")
@@ -114,7 +158,7 @@ async def test_model():
         tanggal_validasi_start_index = tanggal_test_start_index + 5
         
         df_tanggal = preprocessor.df['Tanggal'].copy()
-        df_tanggal = pd.to_datetime(df_tanggal, dayfirst=True)
+        df_tanggal = pd.to_datetime(df_tanggal) # Hapus dayfirst=True jika formatnya YYYY-MM-DD
 
         tanggal_test = df_tanggal.iloc[tanggal_test_start_index : tanggal_test_start_index + len(testing_data)].dt.strftime('%Y-%m-%d').tolist()
         tanggal_validasi = df_tanggal.iloc[tanggal_validasi_start_index : tanggal_validasi_start_index + len(hasil_prediksi_denorm)].dt.strftime('%Y-%m-%d').tolist()
@@ -141,7 +185,7 @@ async def predict_future(n_hari: int = Query(..., gt=0)):
         
         hasil_forw_predict_raw = model_state["model"].forw_predict(data_awal, n_hari, preprocessor)
         
-        df_tanggal = pd.to_datetime(preprocessor.df['Tanggal'], dayfirst=True)
+        df_tanggal = pd.to_datetime(preprocessor.df['Tanggal']) # Hapus dayfirst=True jika formatnya YYYY-MM-DD
         tanggal_terakhir = df_tanggal.iloc[-1]
         start_date = tanggal_terakhir + pd.offsets.BDay(1)
         tanggal_prediksi = pd.bdate_range(start=start_date, periods=n_hari)
