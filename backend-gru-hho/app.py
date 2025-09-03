@@ -12,9 +12,7 @@ from model import DataPreprocessing, GRUHHO
 app = FastAPI()
 
 origins = [
-    "http://localhost:3000",
-    "https://mkii-forecast.vercel.app", # Ganti dengan URL frontend Anda
-    "https://forecast-gru-hho-production.up.railway.app" # Ganti dengan URL backend Anda jika berbeda
+    "https://mkii-forecast.vercel.app", 
 ]
 
 app.add_middleware(
