@@ -55,15 +55,15 @@ async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
     """
     now = datetime.now()
     
-    # 1. Cek cache
+    # Cek cache
     if pair in cache and cache[pair].get("data") is not None and cache[pair]["last_updated"].date() == now.date():
         print(f"Menggunakan data dari cache untuk {pair}")
         df = cache[pair]["data"]
     else:
-        # 2. Ambil dari yfinance jika tidak ada di cache atau sudah usang
+        # Ambil dari yfinance jika tidak ada di cache atau usang
         print(f"Mengambil data baru untuk {pair} dari yfinance...")
         try:
-            data = yf.download(pair, period="5y", interval="1d", progress=False)
+            data = yf.download(pair, period="5y", interval="1d", progress=False, auto_adjust=True)
             
             if data.empty:
                 raise HTTPException(status_code=404, detail=f"Tidak ada data untuk pair: {pair}. Mungkin ticker tidak valid.")
@@ -73,20 +73,23 @@ async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
             df.index.name = 'Tanggal'
             df.rename(columns={'Close': 'Terakhir'}, inplace=True)
             
-            # 3. Update cache
+            # Update cache
             cache[pair] = {"data": df, "last_updated": now}
+
         except Exception as e:
             traceback.print_exc()
-            # PERBAIKAN: Jangan gunakan list sebagai key. Simpan error di bawah key 'pair'.
             cache[pair] = {"data": None, "last_updated": now, "error": str(e)}
             raise HTTPException(status_code=500, detail=f"Gagal mengambil data dari yfinance: {str(e)}")
 
-    # 4. Simpan ke file agar bisa digunakan oleh endpoint lain
+    # Simpan ke file agar bisa digunakan oleh endpoint lain
     df.to_csv('data.csv')
 
-    # 5. Siapkan data untuk pratinjau di frontend
+    # Siapkan data untuk pratinjau di frontend
     df_display = df.reset_index()
-    df_display['Tanggal'] = pd.to_datetime(df_display['Tanggal']).dt.strftime('%Y-%m-%d')
+    # Konversi tipe data tanggal ke string
+    df_display['Tanggal'] = df_display['Tanggal'].dt.strftime('%Y-%m-%d')
+    # Konversi kolom 'Terakhir' ke tipe float standar Python
+    df_display['Terakhir'] = df_display['Terakhir'].astype(float)
 
     # Reset state model setiap kali data baru dimuat
     model_state.update({
@@ -95,10 +98,14 @@ async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
         "future_predictions": None
     })
 
+    # Pastikan semua nilai yang dikembalikan adalah tipe data Python asli
+    data_list = df_display.to_dict(orient='records')
+    batch_size = int(len(df) * 0.7)
+
     return {
         "message": f"Data untuk {pair} berhasil dimuat.",
-        "data": df_display.to_dict(orient='records'),
-        "max_batch_size": int(len(df) * 0.8) 
+        "data": data_list,
+        "max_batch_size": batch_size
     }
 
 @app.post("/train")
