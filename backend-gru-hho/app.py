@@ -46,7 +46,6 @@ class TrainingParams(BaseModel):
     elang: int
     iterasi: int
 
-# file: app.py
 
 @app.get("/get-data")
 async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
@@ -57,12 +56,11 @@ async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
     now = datetime.now()
     
     # 1. Cek cache
-    # Gunakan .get() untuk menghindari error jika 'data' tidak ada
     if pair in cache and cache[pair].get("data") is not None and cache[pair]["last_updated"].date() == now.date():
         print(f"Menggunakan data dari cache untuk {pair}")
         df = cache[pair]["data"]
     else:
-        # 2. Ambil dari yfinance jika tidak ada di cache atau usang
+        # 2. Ambil dari yfinance jika tidak ada di cache atau sudah usang
         print(f"Mengambil data baru untuk {pair} dari yfinance...")
         try:
             data = yf.download(pair, period="5y", interval="1d", progress=False)
@@ -77,11 +75,9 @@ async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
             
             # 3. Update cache
             cache[pair] = {"data": df, "last_updated": now}
-
         except Exception as e:
             traceback.print_exc()
-            # INI BAGIAN PENTING: Pastikan cache di-handle dengan benar saat error
-            # Simpan 'None' untuk data, bukan list kosong atau objek lain
+            # PERBAIKAN: Jangan gunakan list sebagai key. Simpan error di bawah key 'pair'.
             cache[pair] = {"data": None, "last_updated": now, "error": str(e)}
             raise HTTPException(status_code=500, detail=f"Gagal mengambil data dari yfinance: {str(e)}")
 
@@ -100,9 +96,9 @@ async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
     })
 
     return {
-        "message": f"VERSI BARU SUDAH LIVE v2 - Data untuk {pair} berhasil dimuat.",
+        "message": f"Data untuk {pair} berhasil dimuat.",
         "data": df_display.to_dict(orient='records'),
-        "max_batch_size": int(len(df) * 0.7)
+        "max_batch_size": int(len(df) * 0.8) 
     }
 
 @app.post("/train")
