@@ -13,20 +13,14 @@ class DataPreprocessing:
         self.nilai_min = None
         self.nilai_max = None
 
-    def load_and_preprocess(self, file_path):
-        # Data dari yfinance sudah bersih. 'Tanggal' dijadikan index dan diparsing sebagai tanggal.
-        data = pd.read_csv(file_path, index_col='Tanggal', parse_dates=True)
-        self.df = pd.DataFrame(data)
+    def load_and_preprocess(self, dataframe: pd.DataFrame):
+        # langsung assign DataFrame yang sudah disiapkan dari yfinance
+        self.df = dataframe.copy().reset_index()
 
-        # Pembersihan data tidak lagi diperlukan karena data dari yfinance sudah dalam format float.
-        # Baris-baris berikut dihapus:
-        # self.df.drop(['Pembukaan', 'Tertinggi', 'Terendah', 'Vol.', 'Perubahan%'], axis=1, inplace=True)
-        # self.df['Terakhir'] = self.df['Terakhir'].str.replace('.', '', regex=False)
-        # self.df['Terakhir'] = self.df['Terakhir'].str.replace(',', '.', regex=False)
+        # pastikan kolom numeric
         self.df['Terakhir'] = self.df['Terakhir'].astype(float)
-        # Data dari yfinance sudah urut secara kronologis (oldest to newest), jadi tidak perlu dibalik.
-        # Reset index agar kolom 'Tanggal' bisa diakses oleh kode di app.py
-        self.df.reset_index(inplace=True)
+
+        # normalisasi
         self.df_normalisasi = self.data_normalisasi(self.df)
         self.split_data()
         return self
