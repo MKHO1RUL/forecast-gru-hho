@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
@@ -12,8 +13,9 @@ from model import DataPreprocessing, GRUHHO
 app = FastAPI()
 
 origins = [
-    "https://mkii-forecast.vercel.app",
-    "https://forecast-gru-hho-production.up.railway.app"
+    "http://localhost:3000",
+    "https://mkii-forecast.vercel.app", # Ganti dengan URL frontend Anda
+    "https://forecast-gru-hho-production.up.railway.app" # Ganti dengan URL backend Anda jika berbeda
 ]
 
 app.add_middleware(
@@ -29,6 +31,7 @@ app.add_middleware(
 cache = {}
 
 model_state = {
+    "raw_df": None,
     "preprocessor": None,
     "model": None,
     "pola_training": None,
@@ -46,26 +49,22 @@ class TrainingParams(BaseModel):
     elang: int
     iterasi: int
 
-
 @app.get("/get-data")
 async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
     """
     Mengambil data forex dari yfinance dengan caching.
-    Data yang diambil disimpan ke 'data.csv' untuk digunakan oleh endpoint lain.
     """
     now = datetime.now()
     
-    # Cek cache
-    if pair in cache and cache[pair].get("data") is not None and cache[pair]["last_updated"].date() == now.date():
+    # 1. Cek cache
+    if pair in cache and cache[pair]["last_updated"].date() == now.date():
         print(f"Menggunakan data dari cache untuk {pair}")
         df = cache[pair]["data"]
     else:
-        # Ambil dari yfinance jika tidak ada di cache atau usang
+        # 2. Ambil dari yfinance jika tidak ada di cache atau sudah usang
         print(f"Mengambil data baru untuk {pair} dari yfinance...")
         try:
-            # The FutureWarning indicates auto_adjust is now True by default, so explicitly setting it might not be needed
-            # but keeping it doesn't hurt.
-            data = yf.download(pair, period="5y", interval="1d", progress=False, auto_adjust=True)
+            data = yf.download(pair, period="5y", interval="1d", progress=False)
             
             if data.empty:
                 raise HTTPException(status_code=404, detail=f"Tidak ada data untuk pair: {pair}. Mungkin ticker tidak valid.")
@@ -75,53 +74,45 @@ async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
             df.index.name = 'Tanggal'
             df.rename(columns={'Close': 'Terakhir'}, inplace=True)
             
-            # Update cache
+            # 3. Update cache
             cache[pair] = {"data": df, "last_updated": now}
-
         except Exception as e:
-            traceback.print_exc() # Prints the full traceback to stderr/logs
-            print(f"Detailed yfinance error for {pair}: {e}") # Added for more specific error message in logs
-            cache[pair] = {"data": None, "last_updated": now, "error": str(e)}
+            traceback.print_exc()
             raise HTTPException(status_code=500, detail=f"Gagal mengambil data dari yfinance: {str(e)}")
 
-    # Simpan ke file agar bisa digunakan oleh endpoint lain
-    df.to_csv('data.csv')
+    # 4. Simpan DataFrame ke dalam state untuk digunakan oleh endpoint lain
+    model_state["raw_df"] = df.copy()
 
-    # Siapkan data untuk pratinjau di frontend
+    # 5. Siapkan data untuk pratinjau di frontend
     df_display = df.reset_index()
-    # Konversi tipe data tanggal ke string
-    df_display['Tanggal'] = df_display['Tanggal'].dt.strftime('%Y-%m-%d')
-    # Konversi kolom 'Terakhir' ke tipe float standar Python
+    df_display['Tanggal'] = pd.to_datetime(df_display['Tanggal']).dt.strftime('%Y-%m-%d')
+    # Pastikan tipe data numerik aman untuk serialisasi JSON
     df_display['Terakhir'] = df_display['Terakhir'].astype(float)
 
     # Reset state model setiap kali data baru dimuat
     model_state.update({
-        "preprocessor": None, "model": None, "pola_training": None,
+        "preprocessor": None, "model": None, "pola_training": None, # raw_df tidak di-reset
         "pola_testing": None, "training_log": [], "test_results": None,
         "future_predictions": None
     })
 
-    # Pastikan semua nilai yang dikembalikan adalah tipe data Python asli
-    data_list = df_display.to_dict(orient='records')
-    batch_size = int(len(df) * 0.7)
-
-    return {
+    return JSONResponse(content={
         "message": f"Data untuk {pair} berhasil dimuat.",
-        "data": data_list,
-        "max_batch_size": batch_size
-    }
+        "data": df_display.to_dict(orient='records'),
+        "max_batch_size": int(len(df) * 0.8)  # Estimasi, nilai pasti akan ada setelah training
+    })
 
 @app.post("/train")
 async def train_model(params: TrainingParams):
     try:
-        # Baca data dari file yang disimpan oleh /get-data
-        with open('data.csv', 'rb') as f:
-            contents = f.read()
+        df = model_state.get("raw_df")
+        if df is None:
+            raise HTTPException(status_code=400, detail="Data tidak ditemukan. Silakan muat data melalui endpoint /get-data terlebih dahulu.")
         
         preprocessor = DataPreprocessing()
-        # PENTING: Pastikan method load_and_preprocess dapat menangani format tanggal 'YYYY-MM-DD'
-        # dari yfinance, bukan 'DD/MM/YYYY'. Mungkin perlu penyesuaian di class DataPreprocessing.
-        preprocessor.load_and_preprocess(io.BytesIO(contents))
+        # Asumsi: load_and_preprocess dimodifikasi untuk menerima DataFrame
+        # Contoh: def load_and_preprocess(self, dataframe):
+        preprocessor.load_and_preprocess(dataframe=df)
         
         model_state["preprocessor"] = preprocessor
         model_state["pola_training"] = preprocessor.create_pola(preprocessor.train_data)
@@ -146,8 +137,6 @@ async def train_model(params: TrainingParams):
             "best_mse": best_mse[1],
             "training_log": model.training_log
         }
-    except FileNotFoundError:
-        raise HTTPException(status_code=400, detail="Data tidak ditemukan. Silakan muat data melalui endpoint /get-data terlebih dahulu.")
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error during training: {str(e)}")
@@ -170,7 +159,7 @@ async def test_model():
         tanggal_validasi_start_index = tanggal_test_start_index + 5
         
         df_tanggal = preprocessor.df['Tanggal'].copy()
-        df_tanggal = pd.to_datetime(df_tanggal) # Hapus dayfirst=True jika formatnya YYYY-MM-DD
+        df_tanggal = pd.to_datetime(df_tanggal)
 
         tanggal_test = df_tanggal.iloc[tanggal_test_start_index : tanggal_test_start_index + len(testing_data)].dt.strftime('%Y-%m-%d').tolist()
         tanggal_validasi = df_tanggal.iloc[tanggal_validasi_start_index : tanggal_validasi_start_index + len(hasil_prediksi_denorm)].dt.strftime('%Y-%m-%d').tolist()
@@ -197,7 +186,7 @@ async def predict_future(n_hari: int = Query(..., gt=0)):
         
         hasil_forw_predict_raw = model_state["model"].forw_predict(data_awal, n_hari, preprocessor)
         
-        df_tanggal = pd.to_datetime(preprocessor.df['Tanggal']) # Hapus dayfirst=True jika formatnya YYYY-MM-DD
+        df_tanggal = pd.to_datetime(preprocessor.df['Tanggal'])
         tanggal_terakhir = df_tanggal.iloc[-1]
         start_date = tanggal_terakhir + pd.offsets.BDay(1)
         tanggal_prediksi = pd.bdate_range(start=start_date, periods=n_hari)
