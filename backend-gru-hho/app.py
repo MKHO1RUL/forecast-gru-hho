@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
+from fastapi.encoders import jsonable_encoder
 import io
 import traceback
 import yfinance as yf
@@ -132,11 +133,11 @@ async def train_model(params: TrainingParams):
         
         model_state["training_log"] = model.training_log
         
-        return {
+        return JSONResponse(content=jsonable_encoder({
             "message": "Training completed.",
-            "best_mse": best_mse[1],
+            "best_mse": float(best_mse[1]),
             "training_log": model.training_log
-        }
+        }))
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error during training: {str(e)}")
@@ -150,7 +151,7 @@ async def test_model():
         prediksi_norm, mse_test = model_state["model"].test_gru(model_state["pola_testing"])
         
         preprocessor = model_state["preprocessor"]
-        hasil_prediksi_denorm = preprocessor.data_denormalisasi([p[0] for p in prediksi_norm])
+        hasil_prediksi_denorm = [float(v) for v in preprocessor.data_denormalisasi([p[0] for p in prediksi_norm])]
 
         testing_data_start_index = len(preprocessor.train_data) + 5
         testing_data = preprocessor.df["Terakhir"].iloc[testing_data_start_index : testing_data_start_index + len(hasil_prediksi_denorm)].tolist()
@@ -167,10 +168,10 @@ async def test_model():
         model_state["test_results"] = {
             "testing_data": {"dates": tanggal_test, "values": testing_data},
             "prediction_data": {"dates": tanggal_validasi, "values": hasil_prediksi_denorm},
-            "mse": mse_test
+            "mse": float(mse_test)
         }
 
-        return model_state["test_results"]
+        return JSONResponse(content=jsonable_encoder(model_state["test_results"]))
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error during testing: {str(e)}")
@@ -184,21 +185,21 @@ async def predict_future(n_hari: int = Query(..., gt=0)):
         preprocessor = model_state["preprocessor"]
         data_awal = list(preprocessor.df["Terakhir"].iloc[-5:])
         
-        hasil_forw_predict_raw = model_state["model"].forw_predict(data_awal, n_hari, preprocessor)
+        hasil_forw_predict_raw = [float(v) for v in model_state["model"].forw_predict(data_awal, n_hari, preprocessor)]
         
         df_tanggal = pd.to_datetime(preprocessor.df['Tanggal'])
         tanggal_terakhir = df_tanggal.iloc[-1]
         start_date = tanggal_terakhir + pd.offsets.BDay(1)
         tanggal_prediksi = pd.bdate_range(start=start_date, periods=n_hari)
 
-        predictions = [
+        predictions = jsonable_encoder([
             {"date": date.strftime('%Y-%m-%d'), "value": value}
             for date, value in zip(tanggal_prediksi, hasil_forw_predict_raw)
-        ]
+        ])
 
         model_state["future_predictions"] = predictions
         
-        return {"predictions": predictions}
+        return JSONResponse(content={"predictions": predictions})
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error during prediction: {str(e)}")
