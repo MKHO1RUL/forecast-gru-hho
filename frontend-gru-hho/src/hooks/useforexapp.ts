@@ -2,11 +2,11 @@ import { useReducer, useCallback, useRef, useEffect } from 'react';
 import { DataPoint, Theme } from '../types';
 import { Chart as ChartJS } from 'chart.js';
 
-type PlotDataset = {
+export type PlotDataset = {
   label: string;
   data: (number | { x: number; y: number } | null)[];
   // Izinkan properti lain yang mungkin digunakan oleh Chart.js
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 type AppState = {

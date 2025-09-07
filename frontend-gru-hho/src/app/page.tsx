@@ -12,8 +12,6 @@ import {
   Legend,
   Filler,
   TimeScale,
-  ChartData,
-  ChartArea,
   ScriptableContext,
   ChartOptions,
   Plugin,
@@ -25,7 +23,7 @@ import { Header } from "../components/header";
 import { ControlsSidebar } from "../components/controlsidebar";
 import { MainContent } from "../components/maincontent";
 import { InfoSidebar } from "../components/infosidebar";
-import { useForexApp } from "../hooks/useforexapp";
+import { useForexApp, PlotDataset } from "../hooks/useforexapp";
 import { DataPoint, PredictionData, Theme } from "../types";
 
 ChartJS.register(
@@ -53,8 +51,8 @@ export default function Home() {
   useEffect(() => {
     let zoomPlugin: Plugin | undefined;
     const registerPlugin = async () => {
-      const module = await import('chartjs-plugin-zoom');
-      zoomPlugin = module.default;
+      const zoomPluginModule = await import('chartjs-plugin-zoom');
+      zoomPlugin = zoomPluginModule.default;
       ChartJS.register(zoomPlugin);
     };
     registerPlugin();
@@ -228,7 +226,7 @@ export default function Home() {
     // PERBAIKAN: Hapus plot prediksi masa depan yang lama saat training ulang.
     dispatch({
       type: 'UPDATE_PLOT_DATA', payload: (datasets: any[]) => datasets.filter(
-        (ds) => !ds.label?.startsWith('Prediction (')
+        (ds: PlotDataset) => !ds.label?.startsWith('Prediction (')
       )
     });
 
@@ -254,7 +252,7 @@ export default function Home() {
         // PERBAIKAN: Menangani pesan error dari backend yang lebih detail
         if (errorData.detail && Array.isArray(errorData.detail)) {
           const errorMessages = errorData.detail.map(
-            (err: any) => `- ${err.loc.length > 1 ? err.loc[1] : 'Error'}: ${err.msg}`
+            (err: { loc: string[]; msg: string }) => `- ${err.loc.length > 1 ? err.loc[1] : 'Error'}: ${err.msg}`
           ).join('\n');
           throw new Error(`Invalid Parameters:\n${errorMessages}`);
         }
@@ -384,10 +382,10 @@ export default function Home() {
         }});
       }
 
-      dispatch({ type: 'UPDATE_PLOT_DATA', payload: (prevDatasets: any[]) => {
+      dispatch({ type: 'UPDATE_PLOT_DATA', payload: (prevDatasets: PlotDataset[]) => {
         const newDatasets = [...prevDatasets];
         // Remove old prediction if it exists
-        const existingPredIndex = newDatasets.findIndex((ds) => ds.label?.startsWith('Prediction ('));
+        const existingPredIndex = newDatasets.findIndex((ds: PlotDataset) => ds.label?.startsWith('Prediction ('));
         if (existingPredIndex > -1) {
           newDatasets.splice(existingPredIndex, 1);
         }
@@ -422,13 +420,13 @@ export default function Home() {
     } finally {
       dispatch({ type: 'SET_PREDICTING', payload: false });
     }
-  }, [state.params.n_hari, dispatch]);
+  }, [state.params.n_hari, state.dateRange, dispatch]);
 
   const handleResetZoom = useCallback(() => {
     if (chartRef.current) {
       chartRef.current.resetZoom();
     }
-  }, []);
+  }, [chartRef]);
 
   const handleTimeRangeZoom = useCallback((range: '1w' | '1m' | '1y' | '5y') => {
     const chart = chartRef.current;
@@ -458,7 +456,7 @@ export default function Home() {
     // Pastikan zoom tidak melebihi data yang ada
     const dataMin = state.dateRange.min ?? 0;
     chart.zoomScale('x', { min: Math.max(min ?? dataMin, dataMin), max }, 'default');
-  }, [state.dateRange]);
+  }, [chartRef, state.dateRange.min, state.dateRange.max]);
 
   // --- Chart Options ---
   const chartOptions: ChartOptions<'line'> = useMemo(() => {
