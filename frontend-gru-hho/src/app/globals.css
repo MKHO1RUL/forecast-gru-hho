@@ -1,26 +1,82 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Light Mode Palette */
+  --background: #F3F4F6;      /* Putih */
+  --foreground: #1A1A1A;      /* Hitam Gelap */
+  --primary: #1E90FF;         /* Biru Cerah */
+  --primary-hover: #1C86EE;   /* Biru sedikit lebih gelap untuk hover */
+  --secondary: #F3F4F6;       /* Abu Sangat Muda (Pengganti E0E0E0 untuk kontras lebih baik) */
+  --secondary-hover: #E5E7EB; /* Abu sedikit lebih gelap untuk hover */
+  --card-background: #FFFFFF;
+  --input-background: #F9FAFB;
+  --input-border: #D1D5DB;
+  --text-muted: #6B7280;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.dark {
+  /* Dark Mode Palette */
+  --background: #121212;      /* Hitam Gelap / Charcoal */
+  --foreground: #FFFFFF;      /* Putih */
+  --primary: #0A3D62;         /* Biru Tua */
+  --primary-hover: #083353;   /* Biru Tua sedikit lebih gelap */
+  --secondary: #2E2E2E;       /* Abu Gelap */
+  --secondary-hover: #3E3E3E; /* Abu sedikit lebih gelap */
+  --card-background: #1F2937;
+  --input-background: #374151;
+  --input-border: #4B5563;
+  --text-muted: #9CA3AF;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+/* PERBAIKAN: Sembunyikan panah (stepper) pada input angka */
+/* Chrome, Safari, Edge, Opera */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Firefox */
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
+.dot-matrix-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Courier New", monospace;
+  font-weight: 700;
+  display: inline-block;
+  white-space: pre-wrap; /* biar spasi tetap terjaga dan teks bisa wrap */
+}
+
+/* scrolling container */
+.dot-scroll-container {
+  display: flex;
+  -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+  mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+  overflow: hidden;
+  white-space: nowrap;
+  position: relative;
+}
+
+.dot-scroll-item {
+  flex-shrink: 0; /* Mencegah konten menyusut */
+  padding-right: 7rem; /* Jarak antar teks yang berulang */
+  white-space: nowrap;
+  will-change: transform;
+  animation-name: dm-scroll-left;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-duration: var(--duration, 10s);
+}
+
+@keyframes dm-scroll-left {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-100%); }
 }

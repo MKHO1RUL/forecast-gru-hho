@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, ChangeEvent, useEffect, useMemo } from 'react';
-import { Line } from 'react-chartjs-2';
+import { useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -11,11 +10,23 @@ import {
   Title,
   Tooltip,
   Legend,
+  Filler,
   TimeScale,
   ChartData,
+  ChartArea,
+  ScriptableContext,
   ChartOptions,
-} from 'chart.js';
-import 'chartjs-adapter-date-fns';
+  Plugin,
+} from "chart.js";
+import "chartjs-adapter-date-fns";
+import { sub } from "date-fns";
+
+import { Header } from "../components/header";
+import { ControlsSidebar } from "../components/controlsidebar";
+import { MainContent } from "../components/maincontent";
+import { InfoSidebar } from "../components/infosidebar";
+import { useForexApp } from "../hooks/useforexapp";
+import { DataPoint, PredictionData, Theme } from "../types";
 
 ChartJS.register(
   CategoryScale,
@@ -25,230 +36,356 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
+  Filler,
   TimeScale
 );
-
-interface DataPoint {
-  Tanggal: string;
-  Terakhir: number;
-}
-
-interface PredictionData {
-  date: string;
-  value: number;
-}
-
-type Theme = 'light' | 'dark';
 
 const FOREX_PAIRS = [
   "EURUSD=X", "GBPUSD=X", "USDJPY=X", "GBPJPY=X", "AUDUSD=X", "USDCAD=X", "USDCHF=X", "NZDUSD=X"
 ];
 
 export default function Home() {
-  const [selectedPair, setSelectedPair] = useState<string>(FOREX_PAIRS[0]);
-  const [isLoadingData, setIsLoadingData] = useState<boolean>(false);
-  const [tableData, setTableData] = useState<DataPoint[]>([]);
-  const [maxBatchSize, setMaxBatchSize] = useState<number>(0);
-  const [status, setStatus] = useState<string>('Please select a forex pair and load the data.');
-  const [outputLog, setOutputLog] = useState<string[]>([]);
-  const [isTraining, setIsTraining] = useState<boolean>(false);
-  const [isTesting, setIsTesting] = useState<boolean>(false);
-  const [isPredicting, setIsPredicting] = useState<boolean>(false);
-  const [isTrained, setIsTrained] = useState<boolean>(false);
-  const [theme, setTheme] = useState<Theme>('light');
-  const [plotData, setPlotData] = useState<ChartData<'line'>>({ datasets: [] });
+  const { state, dispatch, refs, handlers } = useForexApp();
+  const { refs: { chartRef, paramContainerRef, logContainerRef }, handlers: { handleParamChange, handleSelectedPairChange, handleParamKeyDown } } = { refs, handlers };
 
-  const [params, setParams] = useState({
-    jml_hdnunt: '4',
-    batas_MSE: '0.001',
-    batch_size: '8',
-    maks_epoch: '10',
-    elang: '5',
-    iterasi: '10',
-    n_hari: '7',
-  });
-
+  // --- Effects ---
+  // Register the zoom plugin only on the client side to avoid SSR issues.
   useEffect(() => {
-    const root = window.document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
+    let zoomPlugin: Plugin | undefined;
+    const registerPlugin = async () => {
+      const module = await import('chartjs-plugin-zoom');
+      zoomPlugin = module.default;
+      ChartJS.register(zoomPlugin);
+    };
+    registerPlugin();
+    return () => {
+      if (zoomPlugin) {
+        ChartJS.unregister(zoomPlugin);
+      }
+    };
+  }, []);
+
+  // Memoize training parameters to avoid unnecessary effect runs
+  const trainingParamsMemo = useMemo(() => ({
+    jml_hdnunt: state.params.jml_hdnunt,
+    batas_MSE: state.params.batas_MSE,
+    batch_size: state.params.batch_size,
+    maks_epoch: state.params.maks_epoch,
+    elang: state.params.elang,
+    iterasi: state.params.iterasi,
+  }), [
+    state.params.jml_hdnunt,
+    state.params.batas_MSE,
+    state.params.batch_size,
+    state.params.maks_epoch,
+    state.params.elang,
+    state.params.iterasi,
+  ]);
+
+  // Ref untuk melacak nilai parameter sebelumnya agar efek reset berjalan dengan benar.
+  const prevTrainingParamsRef = useRef(trainingParamsMemo);
+
+  // Reset model status if training parameters change
+  useEffect(() => {
+    // Efek ini seharusnya hanya mereset status jika parameter benar-benar berubah.
+    // Kita membandingkan parameter saat ini dengan nilai dari render sebelumnya.
+    if (JSON.stringify(prevTrainingParamsRef.current) !== JSON.stringify(trainingParamsMemo)) {
+      if (state.isTrained) {
+        dispatch({ type: 'SET_IS_TRAINED', payload: false });
+        dispatch({ type: 'SET_STATUS', payload: 'Parameters changed. Please retrain the model.' });
+        dispatch({ type: 'ADD_LOG', payload: 'Parameters changed. Model needs to be retrained.' });
+      }
     }
-  }, [theme]);
 
+    // Selalu perbarui ref dengan parameter saat ini untuk perbandingan di render berikutnya.
+    prevTrainingParamsRef.current = trainingParamsMemo;
+  }, [trainingParamsMemo, state.isTrained, dispatch]); // useRef is not needed in dependency array
 
-  const handleParamChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setParams(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleLoadData = async () => {
-    if (!selectedPair) {
+  // --- Callbacks ---
+  const handleLoadData = useCallback(async () => {
+    if (!state.selectedPair) {
       alert('Please select a forex pair.');
       return;
     }
 
-    setIsLoadingData(true);
-    setStatus(`Loading data for ${selectedPair}...`);
-    setOutputLog(prev => [...prev, `Fetching 5-year historical data for ${selectedPair}...`]);
-    setTableData([]);
-    setPlotData({ datasets: [] });
-    setIsTrained(false);
+    dispatch({ type: 'SET_LOADING', payload: true });
+    dispatch({ type: 'SET_STATUS', payload: `Loading data for ${state.selectedPair}...` });
+    dispatch({ type: 'ADD_LOG', payload: `Fetching 5-year historical data for ${state.selectedPair}...` });
+    dispatch({ type: 'SET_TABLE_DATA', payload: { data: [], maxBatchSize: 0 }});
+    dispatch({ type: 'SET_PLOT_DATA', payload: [] });
+    dispatch({ type: 'SET_IS_TRAINED', payload: false });
 
     try {
-      const res = await fetch(`https://forecast-gru-hho-production.up.railway.app/get-data?pair=${selectedPair}`);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/get-data?pair=${state.selectedPair}`);
 
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.detail || `Failed to load data for ${selectedPair}.`);
+        throw new Error(errorData.detail || `Failed to load data for ${state.selectedPair}.`);
       }
 
       const data = await res.json();
-      setTableData(data.data);
-      setMaxBatchSize(data.max_batch_size);
-      setStatus('Data loaded successfully.');
-      setOutputLog(prev => [...prev, 'Data loaded successfully. Ready for training.']);
+      dispatch({ type: 'SET_TABLE_DATA', payload: { data: data.data, maxBatchSize: data.max_batch_size } });
+      dispatch({ type: 'SET_STATUS', payload: 'Data loaded successfully.' });
+      dispatch({ type: 'ADD_LOG', payload: 'Data loaded successfully. Ready for training.' });
       
       const initialDataPoints = data.data.map((point: DataPoint) => ({
         x: new Date(point.Tanggal).getTime(),
         y: point.Terakhir,
       }));
 
-      setPlotData({
-        datasets: [
+      if (initialDataPoints.length > 0) {
+        const xValues = initialDataPoints.map((p: { x: number; y: number }) => p.x);
+        const minDate = Math.min(...xValues);
+        const maxDate = Math.max(...xValues);
+        dispatch({ type: 'SET_DATE_RANGE', payload: { min: minDate, max: maxDate } });
+      } else {
+        dispatch({ type: 'SET_DATE_RANGE', payload: { min: null, max: null } });
+      }
+
+      // PERBAIKAN: Pisahkan data menjadi set training dan testing untuk plot awal
+      const allDataPoints = data.data.map((point: DataPoint) => ({
+        x: new Date(point.Tanggal).getTime(),
+        y: point.Terakhir,
+      }));
+
+      // Backend menggunakan 0.7 untuk split, jadi kita sinkronkan di sini
+      const trainSize = Math.floor(allDataPoints.length * 0.7);
+      const trainingPoints = allDataPoints.slice(0, trainSize);
+      // Ambil satu titik dari data training agar garisnya menyambung
+      const testingPoints = allDataPoints.slice(trainSize - 1);
+
+      dispatch({ type: 'SET_PLOT_DATA', payload: [
           {
-            label: 'Historical Data',
-            data: initialDataPoints,
+            label: 'Training Data',
+            data: trainingPoints,
             borderColor: 'blue',
             tension: 0.1,
+            pointRadius: 0, // No circle on the point
+            pointHoverRadius: 5, // Circle appears on hover
+            fill: true,
+            backgroundColor: (context: ScriptableContext<'line'>) => {
+              const chart = context.chart;
+              const { ctx, chartArea } = chart;
+              if (!chartArea) return undefined; // Gradient requires chart area
+              const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+              gradient.addColorStop(0, 'rgba(0, 0, 255, 0.5)');
+              gradient.addColorStop(1, 'rgba(0, 0, 255, 0)');
+              return gradient;
+            },
+          },
+          {
+            label: 'Testing Data (Actual)',
+            data: testingPoints,
+            borderColor: 'green',
+            tension: 0.1,
+            pointRadius: 0, // No circle on the point
+            pointHoverRadius: 5, // Circle appears on hover
+            fill: true,
+            backgroundColor: (context: ScriptableContext<'line'>) => {
+              const chart = context.chart;
+              const { ctx, chartArea } = chart;
+              if (!chartArea) return undefined; // Gradient requires chart area
+              const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+              gradient.addColorStop(0, 'rgba(0, 128, 0, 0.5)');
+              gradient.addColorStop(1, 'rgba(0, 128, 0, 0)');
+              return gradient;
+            },
           },
         ],
       });
 
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred during data fetching.';
-      setStatus(`Error: ${errorMessage}`);
-      setOutputLog(prev => [...prev, `Error: ${errorMessage}`]);
+      dispatch({ type: 'SET_STATUS', payload: `Error: ${errorMessage}` });
+      dispatch({ type: 'ADD_LOG', payload: `Error: ${errorMessage}` });
       alert(`Error: ${errorMessage}`);
     } finally {
-      setIsLoadingData(false);
+      dispatch({ type: 'SET_LOADING', payload: false });
     }
-  };
+  }, [state.selectedPair, dispatch]);
 
-  const handleTrain = async () => {
-    setIsTraining(true);
-    setStatus('Training in progress... Please wait.');
-    setOutputLog(prev => [...prev, 'Training started...']);
+  const handleTrain = useCallback(async () => {
+    // --- Frontend Validation ---
+    const requiredParams: (keyof Omit<typeof state.params, 'n_hari'>)[] = [
+      'jml_hdnunt', 'batas_MSE', 'batch_size', 'maks_epoch', 'elang', 'iterasi'
+    ];
+
+    const missingParams = requiredParams.filter(p => !state.params[p] || state.params[p].trim() === '');
+
+    if (missingParams.length > 0) {
+      const message = `Please fill all parameter fields before training.`;
+      dispatch({ type: 'SET_STATUS', payload: message });
+      dispatch({ type: 'ADD_LOG', payload: `Error: ${message}` });
+      alert(message);
+      return;
+    }
+    // --- End of Validation ---
+
+    dispatch({ type: 'SET_TRAINING', payload: true });
+    dispatch({ type: 'SET_STATUS', payload: 'Training in progress... Please wait.' });
+    dispatch({ type: 'ADD_LOG', payload: 'Training started...' });
+
+    // PERBAIKAN: Hapus plot prediksi masa depan yang lama saat training ulang.
+    dispatch({
+      type: 'UPDATE_PLOT_DATA', payload: (datasets: any[]) => datasets.filter(
+        (ds) => !ds.label?.startsWith('Prediction (')
+      )
+    });
+
 
     try {
       const trainingParams = {
-        jml_hdnunt: parseInt(params.jml_hdnunt),
-        batas_MSE: parseFloat(params.batas_MSE),
-        batch_size: parseInt(params.batch_size),
-        maks_epoch: parseInt(params.maks_epoch),
-        elang: parseInt(params.elang),
-        iterasi: parseInt(params.iterasi),
+        jml_hdnunt: parseInt(state.params.jml_hdnunt),
+        batas_MSE: parseFloat(state.params.batas_MSE),
+        batch_size: parseInt(state.params.batch_size),
+        maks_epoch: parseInt(state.params.maks_epoch),
+        elang: parseInt(state.params.elang),
+        iterasi: parseInt(state.params.iterasi),
       };
 
-      const res = await fetch('https://forecast-gru-hho-production.up.railway.app/train', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/train`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(trainingParams),
       });
 
-      if (!res.ok) {
+      if (!res.ok || !res.body) {
         const errorData = await res.json();
-        throw new Error(errorData.detail || 'Training failed.');
+        // PERBAIKAN: Menangani pesan error dari backend yang lebih detail
+        if (errorData.detail && Array.isArray(errorData.detail)) {
+          const errorMessages = errorData.detail.map(
+            (err: any) => `- ${err.loc.length > 1 ? err.loc[1] : 'Error'}: ${err.msg}`
+          ).join('\n');
+          throw new Error(`Invalid Parameters:\n${errorMessages}`);
+        }
+        throw new Error(errorData.detail || 'Training failed to start.');
       }
 
-      const data = await res.json();
-      setStatus('Training complete!');
-      setOutputLog(prev => [...prev, ...data.training_log, `Training complete! Best MSE: ${data.best_mse}`]);
-      setIsTrained(true);
+      // PERBAIKAN: Memproses response sebagai stream untuk update log secara real-time
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        const chunk = decoder.decode(value, { stream: !done });
+        
+        const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+        for (const line of lines) {
+          try {
+            const data = JSON.parse(line);
+            if (data.type === 'log') {
+              dispatch({ type: 'ADD_LOG', payload: data.message });
+            } else if (data.type === 'complete') {
+              dispatch({ type: 'SET_STATUS', payload: 'Training complete!' });
+              dispatch({ type: 'ADD_LOG', payload: `Training complete! Best MSE: ${data.best_mse}` });
+              dispatch({ type: 'SET_IS_TRAINED', payload: true });
+            } else if (data.type === 'error') {
+              throw new Error(data.message);
+            }
+          } catch (e) {
+            console.error("Failed to parse stream line:", line, e);
+          }
+        }
+      }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred during training.';
-      setStatus(`Error: ${errorMessage}`);
-      setOutputLog(prev => [...prev, `Error: ${errorMessage}`]);
+      dispatch({ type: 'SET_STATUS', payload: `Error: ${errorMessage}` });
+      dispatch({ type: 'ADD_LOG', payload: `Error: ${errorMessage}` });
       alert(`Error: ${errorMessage}`);
     } finally {
-      setIsTraining(false);
+      dispatch({ type: 'SET_TRAINING', payload: false });
     }
-  };
+  }, [state.params, dispatch]);
 
-  const handleTest = async () => {
-    setIsTesting(true);
-    setStatus('Testing in progress...');
-    setOutputLog(prev => [...prev, 'Testing started...']);
+  const handleTest = useCallback(async () => {
+    dispatch({ type: 'SET_TESTING', payload: true });
+    dispatch({ type: 'SET_STATUS', payload: 'Testing in progress...' });
+    dispatch({ type: 'ADD_LOG', payload: 'Testing started...' });
 
     try {
-      const res = await fetch('https://forecast-gru-hho-production.up.railway.app/test');
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/test`);
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.detail || 'Testing failed.');
       }
 
       const data = await res.json();
-      setStatus('Testing complete.');
-      setOutputLog(prev => [...prev, `Testing complete! MSE: ${data.mse}`]);
+      dispatch({ type: 'SET_STATUS', payload: 'Testing complete.' });
+      dispatch({ type: 'ADD_LOG', payload: `Testing complete! MSE: ${data.mse}` });
 
-      const testingDataPoints = data.testing_data.dates.map((date: string, index: number) => ({
-        x: new Date(date).getTime(),
-        y: data.testing_data.values[index],
-      }));
-
-      const predictionDataPoints = data.prediction_data.dates.map((date: string, index: number) => ({
-        x: new Date(date).getTime(),
-        y: data.prediction_data.values[index],
-      }));
-
-      setPlotData({
-        datasets: [
-          {
-            label: 'Testing Data',
-            data: testingDataPoints,
-            borderColor: 'green',
-            tension: 0.1,
-          },
-          {
-            label: 'Testing Prediction',
-            data: predictionDataPoints,
-            borderColor: 'orange',
-            tension: 0.1,
-          },
-        ],
-      });
+      dispatch({
+        type: 'UPDATE_PLOT_DATA', payload: (prevDatasets: any[]) => {
+        // PERBAIKAN: Hapus prediksi lama jika ada, dan tambahkan yang baru.
+        // Jangan hapus data training/testing yang sudah ada.
+        const baseDatasets = prevDatasets.filter(
+          (ds) => ds.label !== 'Testing Prediction'
+        );
+        return [
+            ...baseDatasets,
+            {
+              label: 'Testing Prediction',
+              data: data.prediction_data.dates.map((date: string, index: number) => ({ x: new Date(date).getTime(), y: data.prediction_data.values[index] })),
+              borderColor: 'orange',
+              tension: 0.1,
+              pointRadius: 0, // No circle on the point
+              pointHoverRadius: 5, // Circle appears on hover
+              fill: true,
+              backgroundColor: (context: ScriptableContext<'line'>) => {
+                const chart = context.chart;
+                const { ctx, chartArea } = chart;
+                if (!chartArea) return undefined; // Gradient requires chart area
+                const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+                gradient.addColorStop(0, 'rgba(255, 165, 0, 0.5)');
+                gradient.addColorStop(1, 'rgba(255, 165, 0, 0)');
+                return gradient;
+              },
+            },
+          ];
+      }});
 
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred during testing.';
-      setStatus(`Error: ${errorMessage}`);
-      setOutputLog(prev => [...prev, `Error: ${errorMessage}`]);
+      dispatch({ type: 'SET_STATUS', payload: `Error: ${errorMessage}` });
+      dispatch({ type: 'ADD_LOG', payload: `Error: ${errorMessage}` });
       alert(`Error: ${errorMessage}`);
     } finally {
-      setIsTesting(false);
+      dispatch({ type: 'SET_TESTING', payload: false });
     }
-  };
+  }, [dispatch]);
 
-  const handlePredict = async () => {
-    setIsPredicting(true);
-    setStatus('Predicting future values...');
-    setOutputLog(prev => [...prev, 'Prediction started...']);
+  const handlePredict = useCallback(async () => {
+    dispatch({ type: 'SET_PREDICTING', payload: true });
+    dispatch({ type: 'SET_STATUS', payload: 'Predicting future values...' });
+    dispatch({ type: 'ADD_LOG', payload: 'Prediction started...' });
 
     try {
-      const res = await fetch(`https://forecast-gru-hho-production.up.railway.app/predict?n_hari=${params.n_hari}`);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/predict?n_hari=${state.params.n_hari}`);
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.detail || 'Prediction failed.');
       }
 
       const data = await res.json();
-      setStatus('Prediction complete.');
-      setOutputLog(prev => [...prev, 'Prediction complete.']);
+      dispatch({ type: 'SET_STATUS', payload: 'Prediction complete.' });
+      dispatch({ type: 'ADD_LOG', payload: 'Prediction complete.' });
 
       const futurePredictions: PredictionData[] = data.predictions;
 
-      setPlotData((prevData) => {
-        const newDatasets = [...prevData.datasets];
+      // PERBAIKAN: Perbarui rentang tanggal maksimum untuk menyertakan data prediksi.
+      // Ini akan memperluas batas zoom-out.
+      if (futurePredictions.length > 0) {
+        const lastPredictionDate = new Date(futurePredictions[futurePredictions.length - 1].date).getTime();
+        dispatch({ type: 'SET_DATE_RANGE', payload: {
+          min: state.dateRange.min,
+          max: Math.max(state.dateRange.max ?? 0, lastPredictionDate)
+        }});
+      }
+
+      dispatch({ type: 'UPDATE_PLOT_DATA', payload: (prevDatasets: any[]) => {
+        const newDatasets = [...prevDatasets];
         // Remove old prediction if it exists
         const existingPredIndex = newDatasets.findIndex((ds) => ds.label?.startsWith('Prediction ('));
         if (existingPredIndex > -1) {
@@ -256,65 +393,115 @@ export default function Home() {
         }
 
         newDatasets.push({
-          label: `Prediction (${params.n_hari} days)`,
+          label: `Prediction (${state.params.n_hari} days)`,
           data: futurePredictions.map(p => ({ x: new Date(p.date).getTime(), y: p.value })),
           borderColor: 'red',
           borderDash: [5, 5],
           tension: 0.1,
+          pointRadius: 0, // No circle on the point
+          pointHoverRadius: 5, // Circle appears on hover
+          fill: true,
+          backgroundColor: (context: ScriptableContext<'line'>) => {
+            const chart = context.chart;
+            const { ctx, chartArea } = chart;
+            if (!chartArea) return undefined; // Gradient requires chart area
+            const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+            gradient.addColorStop(0, 'rgba(255, 0, 0, 0.5)');
+            gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+            return gradient;
+          },
         });
-        return { datasets: newDatasets };
-      });
+        return newDatasets;
+      }});
 
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred during prediction.';
-      setStatus(`Error: ${errorMessage}`);
-      setOutputLog(prev => [...prev, `Error: ${errorMessage}`]);
+      dispatch({ type: 'SET_STATUS', payload: `Error: ${errorMessage}` });
+      dispatch({ type: 'ADD_LOG', payload: `Error: ${errorMessage}` });
       alert(`Error: ${errorMessage}`);
     } finally {
-      setIsPredicting(false);
+      dispatch({ type: 'SET_PREDICTING', payload: false });
     }
-  };
+  }, [state.params.n_hari, dispatch]);
 
-  // Reusable Components
-  const Card = ({ title, children, className }: { title: string, children: React.ReactNode, className?: string }) => (
-    <div className={`bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 ${className}`}>
-      <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">{title}</h3>
-      {children}
-    </div>
-  );
+  const handleResetZoom = useCallback(() => {
+    if (chartRef.current) {
+      chartRef.current.resetZoom();
+    }
+  }, []);
 
-  const ParamInput = ({ label, name, value, tooltip }: { label: string, name: string, value: string, tooltip: string }) => (
-    <div>
-      <label htmlFor={name} className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center mb-1">
-        {label}
-        <span className="ml-1.5 text-gray-400 dark:text-gray-500 cursor-pointer group relative">
-          <InfoIcon />
-          <span className="absolute bottom-full mb-2 w-48 p-2 bg-gray-700 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-            {tooltip}
-          </span>
-        </span>
-      </label>
-      <input
-        type="text"
-        id={name}
-        name={name}
-        value={value}
-        onChange={handleParamChange}
-        className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-      />
-    </div>
-  );
+  const handleTimeRangeZoom = useCallback((range: '1w' | '1m' | '1y' | '5y') => {
+    const chart = chartRef.current;
+    if (!chart || !state.dateRange.max) {
+      return;
+    }
 
+    const max = state.dateRange.max;
+    let min;
+
+    switch (range) {
+      case '1w':
+        min = sub(max, { weeks: 1 }).getTime();
+        break;
+      case '1m':
+        min = sub(max, { months: 1 }).getTime();
+        break;
+      case '1y':
+        min = sub(max, { years: 1 }).getTime();
+        break;
+      case '5y':
+      default:
+        min = state.dateRange.min;
+        break;
+    }
+
+    // Pastikan zoom tidak melebihi data yang ada
+    const dataMin = state.dateRange.min ?? 0;
+    chart.zoomScale('x', { min: Math.max(min ?? dataMin, dataMin), max }, 'default');
+  }, [state.dateRange]);
+
+  // --- Chart Options ---
   const chartOptions: ChartOptions<'line'> = useMemo(() => {
-    const gridColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-    const textColor = theme === 'dark' ? '#E5E7EB' : '#1F2937';
+    const gridColor = state.theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(26, 26, 26, 0.1)';
+    const textColor = state.theme === 'dark' ? '#FFFFFF' : '#1A1A1A';
 
-    return {
+    const options: ChartOptions<'line'> = {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: {
+        mode: 'nearest',
+        intersect: false,
+      },
       plugins: {
         legend: { position: 'top' as const, labels: { color: textColor } },
-        title: { display: true, text: 'GBP/IDR Forex Prediction using GRU-HHO', color: textColor, font: { size: 16 } },
+        title: { display: true, text: `${state.selectedPair.replace('=X', '')} Forex Prediction using GRU-HHO`, color: textColor, font: { size: 16 } },
+        tooltip: {
+          mode: 'nearest',
+          intersect: false,
+        },
+        zoom: {
+          pan: {
+            enabled: true,
+            mode: 'x' as const,
+          },
+          zoom: {
+            wheel: {
+              enabled: true,
+            },
+            pinch: {
+              enabled: true,
+            },
+            mode: 'x' as const,
+          },
+          limits: {
+            x: {
+              min: state.dateRange.min ?? undefined,
+              max: state.dateRange.max ?? undefined,
+              // Batasi zoom-in minimal hingga 1 minggu
+              minRange: 1000 * 60 * 60 * 24 * 7
+            }
+          }
+        },
       },
       scales: {
         x: {
@@ -325,147 +512,61 @@ export default function Home() {
           grid: { color: gridColor },
         },
         y: {
-          title: { display: true, text: 'GBP/IDR Forex Price', color: textColor },
+          title: { display: true, text: 'Forex Price', color: textColor },
           ticks: { color: textColor },
           grid: { color: gridColor },
         },
       },
     };
-  }, [theme]);
+
+    return options;
+  }, [state.theme, state.selectedPair, state.dateRange]);
 
 
   return (
-    <div className="min-h-screen">
-      <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-20">
-        <div className="container mx-auto px-6 py-3 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">GRU-HHO Forex Prediction</h1>
-          <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700">
-            {theme === 'light' ? <MoonIcon /> : <SunIcon />}
-          </button>
+    <div className="h-screen flex flex-col lg:flex-row bg-[var(--background)] overflow-hidden">
+      <ControlsSidebar
+        selectedPair={state.selectedPair}
+        handleSelectedPairChange={handleSelectedPairChange}
+        handleLoadData={handleLoadData}
+        isLoadingData={state.isLoadingData}
+        isTraining={state.isTraining}
+        params={state.params}
+        handleParamChange={handleParamChange}
+        handleParamKeyDown={handleParamKeyDown}
+        maxBatchSize={state.maxBatchSize}
+        paramContainerRef={paramContainerRef}
+        forexPairs={FOREX_PAIRS}
+      />
+
+      <div className="flex-1 flex flex-col min-h-0 min-w-0">
+        <Header theme={state.theme} setTheme={(theme: Theme) => dispatch({ type: 'SET_THEME', payload: theme })} />
+
+        <div className="flex-1 container mx-auto p-4 flex flex-col lg:flex-row gap-4 min-h-0">
+          <MainContent
+            handleTrain={handleTrain}
+            handleTest={handleTest}
+            handlePredict={handlePredict}
+            isTraining={state.isTraining}
+            isTesting={state.isTesting}
+            isPredicting={state.isPredicting}
+            isTrained={state.isTrained}
+            tableDataLength={state.tableData.length}
+            status={state.status}
+            chartRef={chartRef}
+            plotData={state.plotData}
+            chartOptions={chartOptions}
+            handleTimeRangeZoom={handleTimeRangeZoom}
+            handleResetZoom={handleResetZoom}
+          />
+
+          <InfoSidebar
+            tableData={state.tableData}
+            outputLog={state.outputLog}
+            logContainerRef={logContainerRef}
+          />
         </div>
-      </header>
-
-      <main className="container mx-auto p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-1 flex flex-col gap-6">
-            <Card title="1. Select Forex Pair">
-              <div className="flex items-center gap-2">
-                <select
-                  name="selectedPair"
-                  value={selectedPair}
-                  onChange={(e) => setSelectedPair(e.target.value)}
-                  className="w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                >
-                  {FOREX_PAIRS.map(pair => (
-                    <option key={pair} value={pair}>{pair.replace('=X', '')}</option>
-                  ))}
-                </select>
-                <button onClick={handleLoadData} disabled={isLoadingData || isTraining} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold whitespace-nowrap disabled:bg-gray-400 dark:disabled:bg-gray-600">
-                  {isLoadingData ? <SpinnerIcon /> : 'Load Data'}
-                </button>
-              </div>
-            </Card>
-
-            <Card title="2. Set Parameters">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <ParamInput label="Hidden Units" name="jml_hdnunt" value={params.jml_hdnunt} tooltip="Number of units in the GRU hidden layer. Must be an integer > 1." />
-                <ParamInput label="MSE Threshold" name="batas_MSE" value={params.batas_MSE} tooltip="Mean Squared Error target for stopping training. Must be a float between 0 and 1." />
-                <ParamInput label="Batch Size" name="batch_size" value={params.batch_size} tooltip={`Number of samples per gradient update. Must be > 0 and <= ${maxBatchSize || 'N/A'}.`} />
-                <ParamInput label="Max Epochs" name="maks_epoch" value={params.maks_epoch} tooltip="Maximum number of training epochs. Must be an integer > 0." />
-                <ParamInput label="Hawks (HHO)" name="elang" value={params.elang} tooltip="Number of hawks in the Harris Hawks Optimization. Must be an integer > 1." />
-                <ParamInput label="Iterations (HHO)" name="iterasi" value={params.iterasi} tooltip="Number of iterations for the HHO algorithm. Must be an integer > 0." />
-                <ParamInput label="Prediction Days" name="n_hari" value={params.n_hari} tooltip="Number of future days to predict. Must be an integer > 0." />
-              </div>
-            </Card>
-
-            <Card title="3. Run Model">
-              <div className="flex flex-col space-y-3">
-                <ActionButton onClick={handleTrain} disabled={isTraining || tableData.length === 0} isLoading={isTraining} text="Train Model" />
-                <ActionButton onClick={handleTest} disabled={isTesting || !isTrained} isLoading={isTesting} text="Test Model" />
-                <ActionButton onClick={handlePredict} disabled={isPredicting || !isTrained} isLoading={isPredicting} text="Predict Future" />
-              </div>
-              <div className="mt-4 h-8 text-sm text-center italic text-gray-600 dark:text-gray-400">{status}</div>
-            </Card>
-
-            <Card title="Output Log" className="lg:max-h-96 flex flex-col">
-              <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-3 rounded-md font-mono text-xs">
-                {outputLog.map((line, index) => (
-                  <p key={index} className={line.toLowerCase().includes('error') ? 'text-red-500' : line.includes('complete') ? 'text-green-500' : ''}>
-                    <span className="text-gray-400 mr-2">{`[${index + 1}]`}</span>{line}
-                  </p>
-                ))}
-              </div>
-            </Card>
-          </div>
-
-          <div className="lg:col-span-2 flex flex-col gap-6">
-            <Card title="Data Preview" className="max-h-[450px] flex flex-col">
-              <div className="flex-1 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
-                <table className="w-full text-sm text-left">
-                  <thead className="text-xs text-gray-700 dark:text-gray-300 uppercase bg-gray-50 dark:bg-gray-700 sticky top-0">
-                    <tr>
-                      <th scope="col" className="px-4 py-2">No</th>
-                      <th scope="col" className="px-4 py-2">Date</th>
-                      <th scope="col" className="px-4 py-2 text-right">Price (IDR)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {tableData.map((row, index) => (
-                      <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                        <td className="px-4 py-1.5">{index + 1}</td>
-                        <td className="px-4 py-1.5">{row.Tanggal}</td>
-                        <td className="px-4 py-1.5 text-right">{row.Terakhir.toLocaleString('id-ID')}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-
-            <Card title="Prediction Chart" className="h-[500px]">
-              <div className="w-full h-full relative">
-                <Line data={plotData} options={chartOptions} />
-              </div>
-            </Card>
-          </div>
-        </div>
-      </main>
+      </div>
     </div>
   );
 }
-
-// Helper Components & Icons
-const ActionButton = ({ onClick, disabled, isLoading, text }: { onClick: () => void, disabled: boolean, isLoading: boolean, text: string }) => (
-  <button
-    onClick={onClick}
-    disabled={disabled || isLoading}
-    className="w-full flex justify-center items-center px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 dark:disabled:bg-gray-600 font-bold transition-colors"
-  >
-    {isLoading ? <SpinnerIcon /> : text}
-  </button>
-);
-
-const SpinnerIcon = () => (
-  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-  </svg>
-);
-
-const InfoIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
-
-const SunIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-  </svg>
-);
-
-const MoonIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-  </svg>
-);
