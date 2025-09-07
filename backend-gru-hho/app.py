@@ -82,20 +82,25 @@ async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
         # 2. Ambil dari yfinance jika tidak ada di cache atau sudah usang
         print(f"Mengambil data baru untuk {pair} dari yfinance...")
         try:
-            data = yf.download(pair, period="5y", interval="1d", progress=False)
+            # PERBAIKAN: Set auto_adjust=True secara eksplisit untuk mendapatkan harga yang disesuaikan
+            # dan menghindari FutureWarning. Ini juga menyederhanakan struktur kolom.
+            data = yf.download(pair, period="5y", interval="1d", progress=False, auto_adjust=True)
 
             if data.empty:
                 raise HTTPException(status_code=404, detail=f"Tidak ada data untuk pair: {pair}. Mungkin ticker tidak valid.")
 
-            # PERBAIKAN: Menangani MultiIndex columns dari yfinance untuk mencegah TypeError
+            # Safeguard untuk MultiIndex, meskipun jarang terjadi dengan auto_adjust=True pada single ticker.
             if isinstance(data.columns, pd.MultiIndex):
                 data.columns = data.columns.get_level_values(0)
 
-            # Pastikan kolom 'Close' ada sebelum melanjutkan
+            # PERBAIKAN: Tangani potensi kolom duplikat dengan hanya mengambil yang pertama.
+            data = data.loc[:, ~data.columns.duplicated()]
+
+            # Dengan auto_adjust=True, kolom harga yang disesuaikan adalah 'Close'.
             if 'Close' not in data.columns:
                 raise ValueError(f"Kolom 'Close' tidak ditemukan dalam data untuk {pair}")
 
-            # Proses DataFrame dengan lebih aman
+            # Proses DataFrame
             df = data[['Close']].dropna().copy()
             df.rename(columns={'Close': 'Terakhir'}, inplace=True)
             df.index.name = 'Tanggal'
