@@ -225,8 +225,8 @@ export default function Home() {
 
     // PERBAIKAN: Hapus plot prediksi masa depan yang lama saat training ulang.
     dispatch({
-      type: 'UPDATE_PLOT_DATA', payload: (datasets: any[]) => datasets.filter(
-        (ds: PlotDataset) => !ds.label?.startsWith('Prediction (')
+      type: 'UPDATE_PLOT_DATA', payload: (datasets: PlotDataset[]) => datasets.filter(
+        (ds) => !ds.label?.startsWith('Prediction (')
       )
     });
 
@@ -315,7 +315,7 @@ export default function Home() {
       dispatch({ type: 'ADD_LOG', payload: `Testing complete! MSE: ${data.mse}` });
 
       dispatch({
-        type: 'UPDATE_PLOT_DATA', payload: (prevDatasets: any[]) => {
+        type: 'UPDATE_PLOT_DATA', payload: (prevDatasets: PlotDataset[]) => {
         // PERBAIKAN: Hapus prediksi lama jika ada, dan tambahkan yang baru.
         // Jangan hapus data training/testing yang sudah ada.
         const baseDatasets = prevDatasets.filter(
@@ -352,7 +352,7 @@ export default function Home() {
     } finally {
       dispatch({ type: 'SET_TESTING', payload: false });
     }
-  }, [dispatch]);
+  }, [dispatch, state]);
 
   const handlePredict = useCallback(async () => {
     dispatch({ type: 'SET_PREDICTING', payload: true });
