@@ -82,25 +82,22 @@ async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
         # 2. Ambil dari yfinance jika tidak ada di cache atau sudah usang
         print(f"Mengambil data baru untuk {pair} dari yfinance...")
         try:
-            # PERBAIKAN: Set auto_adjust=True secara eksplisit untuk mendapatkan harga yang disesuaikan
-            # dan menghindari FutureWarning. Ini juga menyederhanakan struktur kolom.
+            # PERBAIKAN: Mengatasi FutureWarning dengan mengatur auto_adjust secara eksplisit.
+            # Ini menstabilkan struktur data yang diterima dari yfinance.
             data = yf.download(pair, period="5y", interval="1d", progress=False, auto_adjust=True)
 
             if data.empty:
                 raise HTTPException(status_code=404, detail=f"Tidak ada data untuk pair: {pair}. Mungkin ticker tidak valid.")
 
-            # Safeguard untuk MultiIndex, meskipun jarang terjadi dengan auto_adjust=True pada single ticker.
+            # PERBAIKAN: Menangani MultiIndex columns dari yfinance untuk mencegah TypeError
             if isinstance(data.columns, pd.MultiIndex):
                 data.columns = data.columns.get_level_values(0)
 
-            # PERBAIKAN: Tangani potensi kolom duplikat dengan hanya mengambil yang pertama.
-            data = data.loc[:, ~data.columns.duplicated()]
-
-            # Dengan auto_adjust=True, kolom harga yang disesuaikan adalah 'Close'.
+            # Pastikan kolom 'Close' ada sebelum melanjutkan
             if 'Close' not in data.columns:
                 raise ValueError(f"Kolom 'Close' tidak ditemukan dalam data untuk {pair}")
 
-            # Proses DataFrame
+            # Proses DataFrame dengan lebih aman
             df = data[['Close']].dropna().copy()
             df.rename(columns={'Close': 'Terakhir'}, inplace=True)
             df.index.name = 'Tanggal'
@@ -126,15 +123,11 @@ async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
         STATE_FUTURE_PREDICTIONS: None
     })
 
-    # PERBAIKAN: Secara eksplisit menggunakan jsonable_encoder untuk memastikan
-    # semua tipe data (terutama dari pandas/numpy) dapat diserialisasi dengan aman ke JSON.
-    # Ini adalah lapisan pertahanan tambahan untuk mencegah error `unhashable type`.
-    content_to_encode = {
+    return JSONResponse(content={
         "message": f"Data untuk {pair} berhasil dimuat.",
         "data": df_display.to_dict(orient='records'),
         "max_batch_size": int(len(df) * 0.7)  # Estimasi disesuaikan dengan split 70%
-    }
-    return JSONResponse(content=jsonable_encoder(content_to_encode))
+    })
 
 @app.post("/train")
 async def train_model(params: TrainingParams):
