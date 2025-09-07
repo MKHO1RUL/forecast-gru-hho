@@ -126,11 +126,15 @@ async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
         STATE_FUTURE_PREDICTIONS: None
     })
 
-    return JSONResponse(content={
+    # PERBAIKAN: Secara eksplisit menggunakan jsonable_encoder untuk memastikan
+    # semua tipe data (terutama dari pandas/numpy) dapat diserialisasi dengan aman ke JSON.
+    # Ini adalah lapisan pertahanan tambahan untuk mencegah error `unhashable type`.
+    content_to_encode = {
         "message": f"Data untuk {pair} berhasil dimuat.",
         "data": df_display.to_dict(orient='records'),
         "max_batch_size": int(len(df) * 0.7)  # Estimasi disesuaikan dengan split 70%
-    })
+    }
+    return JSONResponse(content=jsonable_encoder(content_to_encode))
 
 @app.post("/train")
 async def train_model(params: TrainingParams):
