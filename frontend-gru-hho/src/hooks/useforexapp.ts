@@ -1,6 +1,13 @@
 import { useReducer, useCallback, useRef, useEffect } from 'react';
-import { DataPoint, PredictionData, Theme } from '../types';
+import { DataPoint, Theme } from '../types';
 import { Chart as ChartJS } from 'chart.js';
+
+type PlotDataset = {
+  label: string;
+  data: (number | { x: number; y: number } | null)[];
+  // Izinkan properti lain yang mungkin digunakan oleh Chart.js
+  [key: string]: any;
+};
 
 type AppState = {
   isLoadingData: boolean;
@@ -12,7 +19,7 @@ type AppState = {
   outputLog: string[];
   tableData: DataPoint[];
   maxBatchSize: number;
-  plotData: { datasets: any[] };
+  plotData: { datasets: PlotDataset[] };
   dateRange: { min: number | null; max: number | null };
   theme: Theme;
   selectedPair: string;
@@ -37,8 +44,8 @@ type Action =
   | { type: 'ADD_LOG'; payload: string }
   | { type: 'RESET_LOG' }
   | { type: 'SET_TABLE_DATA'; payload: { data: DataPoint[]; maxBatchSize: number } }
-  | { type: 'SET_PLOT_DATA'; payload: any[] }
-  | { type: 'UPDATE_PLOT_DATA'; payload: (prevDatasets: any[]) => any[] }
+  | { type: 'SET_PLOT_DATA'; payload: PlotDataset[] }
+  | { type: 'UPDATE_PLOT_DATA'; payload: (prevDatasets: PlotDataset[]) => PlotDataset[] }
   | { type: 'SET_DATE_RANGE'; payload: { min: number | null; max: number | null } }
   | { type: 'SET_THEME'; payload: Theme }
   | { type: 'SET_SELECTED_PAIR'; payload: string }

@@ -1,5 +1,5 @@
 // components/ScrollingDotMatrix.tsx
-import React, { useState, useRef, useLayoutEffect } from 'react';
+import React, { useRef, useLayoutEffect } from 'react';
 import { DotMatrixText } from './dotmatrixtext';
 
 interface ScrollingDotMatrixProps {
