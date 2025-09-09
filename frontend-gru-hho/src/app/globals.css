@@ -35,15 +35,12 @@ body {
   transition: background-color 0.3s, color 0.3s;
 }
 
-/* PERBAIKAN: Sembunyikan panah (stepper) pada input angka */
-/* Chrome, Safari, Edge, Opera */
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
 
-/* Firefox */
 input[type=number] {
   -moz-appearance: textfield;
 }
@@ -52,10 +49,9 @@ input[type=number] {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Courier New", monospace;
   font-weight: 700;
   display: inline-block;
-  white-space: pre-wrap; /* biar spasi tetap terjaga dan teks bisa wrap */
+  white-space: pre-wrap;
 }
 
-/* scrolling container */
 .dot-scroll-container {
   display: flex;
   -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
@@ -66,8 +62,8 @@ input[type=number] {
 }
 
 .dot-scroll-item {
-  flex-shrink: 0; /* Mencegah konten menyusut */
-  padding-right: 7rem; /* Jarak antar teks yang berulang */
+  flex-shrink: 0;
+  padding-right: 7rem;
   white-space: nowrap;
   will-change: transform;
   animation-name: dm-scroll-left;

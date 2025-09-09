@@ -46,8 +46,6 @@ export default function Home() {
   const { state, dispatch, refs, handlers } = useForexApp();
   const { chartRef, paramContainerRef, logContainerRef } = refs;
 
-  // --- Effects ---
-  // Register the zoom plugin only on the client side to avoid SSR issues.
   useEffect(() => {
     let zoomPlugin: Plugin | undefined;
     const registerPlugin = async () => {
@@ -63,7 +61,6 @@ export default function Home() {
     };
   }, []);
 
-  // Memoize training parameters to avoid unnecessary effect runs
   const trainingParamsMemo = useMemo(() => ({
     jml_hdnunt: state.params.jml_hdnunt,
     batas_MSE: state.params.batas_MSE,
@@ -80,13 +77,9 @@ export default function Home() {
     state.params.iterasi,
   ]);
 
-  // Ref untuk melacak nilai parameter sebelumnya agar efek reset berjalan dengan benar.
   const prevTrainingParamsRef = useRef(trainingParamsMemo);
 
-  // Reset model status if training parameters change
   useEffect(() => {
-    // Efek ini seharusnya hanya mereset status jika parameter benar-benar berubah.
-    // Kita membandingkan parameter saat ini dengan nilai dari render sebelumnya.
     if (JSON.stringify(prevTrainingParamsRef.current) !== JSON.stringify(trainingParamsMemo)) {
       if (state.isTrained) {
         dispatch({ type: 'SET_IS_TRAINED', payload: false });
@@ -95,11 +88,9 @@ export default function Home() {
       }
     }
 
-    // Selalu perbarui ref dengan parameter saat ini untuk perbandingan di render berikutnya.
     prevTrainingParamsRef.current = trainingParamsMemo;
-  }, [trainingParamsMemo, state.isTrained, dispatch]); // useRef is not needed in dependency array
+  }, [trainingParamsMemo, state.isTrained, dispatch]);
 
-  // --- Callbacks ---
   const handleLoadData = useCallback(async () => {
     if (!state.selectedPair) {
       alert('Please select a forex pair.');
@@ -110,8 +101,6 @@ export default function Home() {
     dispatch({ type: 'SET_STATUS', payload: `Loading data for ${state.selectedPair}...` });
     dispatch({ type: 'ADD_LOG', payload: `Fetching 5-year historical data for ${state.selectedPair}...` });
     dispatch({ type: 'SET_TABLE_DATA', payload: { data: [], maxBatchSize: 0 }});
-    dispatch({ type: 'SET_PLOT_DATA', payload: [] });
-    dispatch({ type: 'SET_IS_TRAINED', payload: false });
 
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/get-data?pair=${state.selectedPair}`);
@@ -128,7 +117,7 @@ export default function Home() {
       
       const initialDataPoints = data.data.map((point: DataPoint) => ({
         x: new Date(point.Tanggal).getTime(),
-        y: Number(point.Terakhir), // PASTIKAN y adalah number
+        y: Number(point.Terakhir),
       }));
 
       if (initialDataPoints.length > 0) {
@@ -140,16 +129,13 @@ export default function Home() {
         dispatch({ type: 'SET_DATE_RANGE', payload: { min: null, max: null } });
       }
 
-      // PERBAIKAN: Pisahkan data menjadi set training dan testing untuk plot awal
       const allDataPoints = data.data.map((point: DataPoint) => ({
         x: new Date(point.Tanggal).getTime(),
-        y: Number(point.Terakhir), // PASTIKAN y adalah number
+        y: Number(point.Terakhir),
       }));
 
-      // Backend menggunakan 0.7 untuk split, jadi kita sinkronkan di sini
       const trainSize = Math.floor(allDataPoints.length * 0.7);
       const trainingPoints = allDataPoints.slice(0, trainSize);
-      // Ambil satu titik dari data training agar garisnya menyambung
       const testingPoints = allDataPoints.slice(trainSize - 1);
 
       dispatch({ type: 'SET_PLOT_DATA', payload: [
@@ -158,13 +144,13 @@ export default function Home() {
             data: trainingPoints,
             borderColor: 'blue',
             tension: 0.1,
-            pointRadius: 0, // No circle on the point
-            pointHoverRadius: 5, // Circle appears on hover
+            pointRadius: 0, 
+            pointHoverRadius: 5,
             fill: true,
             backgroundColor: (context: ScriptableContext<'line'>) => {
               const chart = context.chart;
               const { ctx, chartArea } = chart;
-              if (!chartArea) return undefined; // Gradient requires chart area
+              if (!chartArea) return undefined;
               const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
               gradient.addColorStop(0, 'rgba(0, 0, 255, 0.5)');
               gradient.addColorStop(1, 'rgba(0, 0, 255, 0)');
@@ -176,13 +162,13 @@ export default function Home() {
             data: testingPoints,
             borderColor: 'green',
             tension: 0.1,
-            pointRadius: 0, // No circle on the point
-            pointHoverRadius: 5, // Circle appears on hover
+            pointRadius: 0,
+            pointHoverRadius: 5,
             fill: true,
             backgroundColor: (context: ScriptableContext<'line'>) => {
               const chart = context.chart;
               const { ctx, chartArea } = chart;
-              if (!chartArea) return undefined; // Gradient requires chart area
+              if (!chartArea) return undefined;
               const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
               gradient.addColorStop(0, 'rgba(0, 128, 0, 0.5)');
               gradient.addColorStop(1, 'rgba(0, 128, 0, 0)');
@@ -203,7 +189,6 @@ export default function Home() {
   }, [state.selectedPair, dispatch]);
 
   const handleTrain = useCallback(async () => {
-    // --- Frontend Validation ---
     const requiredParams: (keyof Omit<typeof state.params, 'n_hari'>)[] = [
       'jml_hdnunt', 'batas_MSE', 'batch_size', 'maks_epoch', 'elang', 'iterasi'
     ];
@@ -217,13 +202,11 @@ export default function Home() {
       alert(message);
       return;
     }
-    // --- End of Validation ---
 
     dispatch({ type: 'SET_TRAINING', payload: true });
     dispatch({ type: 'SET_STATUS', payload: 'Training in progress... Please wait.' });
     dispatch({ type: 'ADD_LOG', payload: 'Training started...' });
 
-    // PERBAIKAN: Hapus plot prediksi masa depan yang lama saat training ulang.
     dispatch({
       type: 'UPDATE_PLOT_DATA', payload: (datasets: PlotDataset[]) => datasets.filter(
         (ds) => !ds.label?.startsWith('Prediction (')
@@ -249,7 +232,6 @@ export default function Home() {
 
       if (!res.ok || !res.body) {
         const errorData = await res.json();
-        // PERBAIKAN: Menangani pesan error dari backend yang lebih detail
         if (errorData.detail && Array.isArray(errorData.detail)) {
           const errorMessages = errorData.detail.map(
             (err: { loc: string[]; msg: string }) => `- ${err.loc.length > 1 ? err.loc[1] : 'Error'}: ${err.msg}`
@@ -259,7 +241,6 @@ export default function Home() {
         throw new Error(errorData.detail || 'Training failed to start.');
       }
 
-      // PERBAIKAN: Memproses response sebagai stream untuk update log secara real-time
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let done = false;
@@ -316,8 +297,6 @@ export default function Home() {
 
       dispatch({
         type: 'UPDATE_PLOT_DATA', payload: (prevDatasets: PlotDataset[]) => {
-        // PERBAIKAN: Hapus prediksi lama jika ada, dan tambahkan yang baru.
-        // Jangan hapus data training/testing yang sudah ada.
         const baseDatasets = prevDatasets.filter(
           (ds) => ds.label !== 'Testing Prediction'
         );
@@ -328,13 +307,13 @@ export default function Home() {
               data: data.prediction_data.dates.map((date: string, index: number) => ({ x: new Date(date).getTime(), y: data.prediction_data.values[index] })),
               borderColor: 'orange',
               tension: 0.1,
-              pointRadius: 0, // No circle on the point
-              pointHoverRadius: 5, // Circle appears on hover
+              pointRadius: 0,
+              pointHoverRadius: 5,
               fill: true,
               backgroundColor: (context: ScriptableContext<'line'>) => {
                 const chart = context.chart;
                 const { ctx, chartArea } = chart;
-                if (!chartArea) return undefined; // Gradient requires chart area
+                if (!chartArea) return undefined;
                 const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
                 gradient.addColorStop(0, 'rgba(255, 165, 0, 0.5)');
                 gradient.addColorStop(1, 'rgba(255, 165, 0, 0)');
@@ -372,8 +351,6 @@ export default function Home() {
 
       const futurePredictions: PredictionData[] = data.predictions;
 
-      // PERBAIKAN: Perbarui rentang tanggal maksimum untuk menyertakan data prediksi.
-      // Ini akan memperluas batas zoom-out.
       if (futurePredictions.length > 0) {
         const lastPredictionDate = new Date(futurePredictions[futurePredictions.length - 1].date).getTime();
         dispatch({ type: 'SET_DATE_RANGE', payload: {
@@ -384,7 +361,6 @@ export default function Home() {
 
       dispatch({ type: 'UPDATE_PLOT_DATA', payload: (prevDatasets: PlotDataset[]) => {
         const newDatasets = [...prevDatasets];
-        // Remove old prediction if it exists
         const existingPredIndex = newDatasets.findIndex((ds: PlotDataset) => ds.label?.startsWith('Prediction ('));
         if (existingPredIndex > -1) {
           newDatasets.splice(existingPredIndex, 1);
@@ -396,13 +372,13 @@ export default function Home() {
           borderColor: 'red',
           borderDash: [5, 5],
           tension: 0.1,
-          pointRadius: 0, // No circle on the point
-          pointHoverRadius: 5, // Circle appears on hover
+          pointRadius: 0,
+          pointHoverRadius: 5,
           fill: true,
           backgroundColor: (context: ScriptableContext<'line'>) => {
             const chart = context.chart;
             const { ctx, chartArea } = chart;
-            if (!chartArea) return undefined; // Gradient requires chart area
+            if (!chartArea) return undefined;
             const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
             gradient.addColorStop(0, 'rgba(255, 0, 0, 0.5)');
             gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
@@ -453,16 +429,13 @@ export default function Home() {
         break;
     }
 
-    // Pastikan zoom tidak melebihi data yang ada
     const dataMin = state.dateRange.min ?? 0;
     chart.zoomScale('x', { min: Math.max(min ?? dataMin, dataMin), max }, 'default');
   }, [chartRef, state.dateRange.min, state.dateRange.max]);
 
-  // --- Chart Options ---
   const chartOptions: ChartOptions<'line'> = useMemo(() => {
     const gridColor = state.theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(26, 26, 26, 0.1)';
     const textColor = state.theme === 'dark' ? '#FFFFFF' : '#1A1A1A';
-    // Cek jika tidak ada data untuk di-plot untuk mencegah chart gepeng
     const noData = !state.plotData.datasets.some(ds => ds.data.length > 0);
 
     const options: ChartOptions<'line'> = {
@@ -501,7 +474,6 @@ export default function Home() {
             x: {
               min: state.dateRange.min ?? undefined,
               max: state.dateRange.max ?? undefined,
-              // Batasi zoom-in minimal hingga 1 minggu
               minRange: 1000 * 60 * 60 * 24 * 7
             }
           }
@@ -518,9 +490,8 @@ export default function Home() {
         y: {
           title: { display: true, text: 'Forex Price', color: textColor },
           ticks: { color: textColor },
-          beginAtZero: false, // Jangan paksa mulai dari 0
+          beginAtZero: false,
           grid: { color: gridColor },
-          // Menetapkan rentang default jika tidak ada data, untuk menghindari sumbu Y yang gepeng.
           suggestedMin: noData ? 0 : undefined,
           suggestedMax: noData ? 1 : undefined,
         },

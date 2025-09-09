@@ -1,7 +1,6 @@
 import React, { ChangeEvent } from 'react';
 import { ParamInput, SpinnerIcon } from './ui/index';
 
-// Define types for props
 interface ParamsState {
   jml_hdnunt: string;
   batas_MSE: string;
@@ -61,7 +60,6 @@ export const ControlsSidebar = ({
           <XIcon />
         </button>
       </div>
-      {/* Data Selection */}
       <div className="flex flex-col gap-2">
         <label className="text-sm font-medium text-[var(--foreground)]">Forex Pair</label>
         <div className="grid grid-cols-[1fr_auto] items-center gap-2">
@@ -83,7 +81,6 @@ export const ControlsSidebar = ({
 
       <hr className="border-t border-[var(--input-border)] my-2" />
 
-      {/* Parameters */}
       <div ref={paramContainerRef} className="flex flex-col gap-2">
         <h4 className="text-lg font-semibold text-[var(--foreground)]">Parameters</h4>
         <ParamInput onKeyDown={handleParamKeyDown} onChange={handleParamChange} label="Hidden Units" name="jml_hdnunt" value={params.jml_hdnunt} placeholder="4" tooltip="Number of units in the GRU hidden layer. Must be an integer > 1." />
