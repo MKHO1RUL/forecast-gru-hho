@@ -12,7 +12,7 @@ interface InfoSidebarProps {
 export const InfoSidebar = ({ tableData, outputLog, logContainerRef }: InfoSidebarProps) => {
   return (
     <aside className="w-full lg:flex-[3] min-w-0 flex flex-col gap-4">
-      <Card title="Data Preview" className="flex-1 flex flex-col min-h-0">
+      <Card title="Data Preview" className="flex flex-col min-h-0 h-80 lg:flex-1 lg:h-auto">
         <div className="flex-1 overflow-auto border border-[var(--secondary)] rounded-lg min-h-0">
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-[var(--foreground)] uppercase bg-[var(--secondary)] sticky top-0">
@@ -34,7 +34,7 @@ export const InfoSidebar = ({ tableData, outputLog, logContainerRef }: InfoSideb
           </table>
         </div>
       </Card>
-      <Card title="Output Log" className="flex-1 flex flex-col min-h-0">
+      <Card title="Output Log" className="flex flex-col min-h-0 h-80 lg:flex-1 lg:h-auto">
         <div ref={logContainerRef} className="flex-1 overflow-y-auto bg-gray-900 dark:bg-black/70 p-3 rounded-md font-mono text-xs min-h-0 shadow-inner shadow-black/50 border border-black/20">
           {outputLog.map((line, index) => (
             <p key={index}>
@@ -46,7 +46,7 @@ export const InfoSidebar = ({ tableData, outputLog, logContainerRef }: InfoSideb
                     ? '#ff3333'
                     : line.includes('complete')
                     ? '#33ff33'
-                    : '#99ff33'
+                    : '#FFFFFF'
                 }
                 className="text-xs"
               />

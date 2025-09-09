@@ -24,6 +24,8 @@ interface ControlsSidebarProps {
   maxBatchSize: number;
   paramContainerRef: React.RefObject<HTMLDivElement | null>;
   forexPairs: string[];
+  isSidebarOpen: boolean;
+  setIsSidebarOpen: (isOpen: boolean) => void;
 }
 
 export const ControlsSidebar = ({
@@ -38,11 +40,27 @@ export const ControlsSidebar = ({
   maxBatchSize,
   paramContainerRef,
   forexPairs,
+  isSidebarOpen,
+  setIsSidebarOpen,
 }: ControlsSidebarProps) => {
+  const XIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  );
+
   return (
-    <aside className="w-full lg:w-72 flex-shrink-0 flex flex-col gap-4 bg-[var(--card-background)] shadow-lg p-4 overflow-y-auto overflow-x-hidden">
-      <h3 className="text-xl font-bold text-[var(--foreground)]">Controls</h3>
-      
+    <aside className={`w-72 flex-shrink-0 flex flex-col gap-4 bg-[var(--card-background)] p-4 overflow-y-auto overflow-x-hidden
+      transform transition-transform duration-300 ease-in-out
+      fixed lg:static inset-y-0 left-0 z-40
+      ${isSidebarOpen ? 'translate-x-0 shadow-lg' : '-translate-x-full'}
+      lg:translate-x-0 lg:shadow-lg`}>
+      <div className="flex justify-between items-center">
+        <h3 className="text-xl font-bold text-[var(--foreground)]">Controls</h3>
+        <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-1 text-[var(--text-muted)] hover:bg-[var(--secondary)] rounded-full">
+          <XIcon />
+        </button>
+      </div>
       {/* Data Selection */}
       <div className="flex flex-col gap-2">
         <label className="text-sm font-medium text-[var(--foreground)]">Forex Pair</label>

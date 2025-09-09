@@ -44,7 +44,7 @@ const FOREX_PAIRS = [
 
 export default function Home() {
   const { state, dispatch, refs, handlers } = useForexApp();
-  const { refs: { chartRef, paramContainerRef, logContainerRef }, handlers: { handleParamChange, handleSelectedPairChange, handleParamKeyDown } } = { refs, handlers };
+  const { chartRef, paramContainerRef, logContainerRef } = refs;
 
   // --- Effects ---
   // Register the zoom plugin only on the client side to avoid SSR issues.
@@ -128,7 +128,7 @@ export default function Home() {
       
       const initialDataPoints = data.data.map((point: DataPoint) => ({
         x: new Date(point.Tanggal).getTime(),
-        y: point.Terakhir,
+        y: Number(point.Terakhir), // PASTIKAN y adalah number
       }));
 
       if (initialDataPoints.length > 0) {
@@ -143,7 +143,7 @@ export default function Home() {
       // PERBAIKAN: Pisahkan data menjadi set training dan testing untuk plot awal
       const allDataPoints = data.data.map((point: DataPoint) => ({
         x: new Date(point.Tanggal).getTime(),
-        y: point.Terakhir,
+        y: Number(point.Terakhir), // PASTIKAN y adalah number
       }));
 
       // Backend menggunakan 0.7 untuk split, jadi kita sinkronkan di sini
@@ -462,10 +462,16 @@ export default function Home() {
   const chartOptions: ChartOptions<'line'> = useMemo(() => {
     const gridColor = state.theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(26, 26, 26, 0.1)';
     const textColor = state.theme === 'dark' ? '#FFFFFF' : '#1A1A1A';
+    // Cek jika tidak ada data untuk di-plot untuk mencegah chart gepeng
+    const noData = !state.plotData.datasets.some(ds => ds.data.length > 0);
 
     const options: ChartOptions<'line'> = {
       responsive: true,
       maintainAspectRatio: false,
+      parsing: {
+        xAxisKey: 'x',
+        yAxisKey: 'y',
+      },
       interaction: {
         mode: 'nearest',
         intersect: false,
@@ -512,35 +518,48 @@ export default function Home() {
         y: {
           title: { display: true, text: 'Forex Price', color: textColor },
           ticks: { color: textColor },
+          beginAtZero: false, // Jangan paksa mulai dari 0
           grid: { color: gridColor },
+          // Menetapkan rentang default jika tidak ada data, untuk menghindari sumbu Y yang gepeng.
+          suggestedMin: noData ? 0 : undefined,
+          suggestedMax: noData ? 1 : undefined,
         },
       },
     };
 
     return options;
-  }, [state.theme, state.selectedPair, state.dateRange]);
+  }, [state.theme, state.selectedPair, state.dateRange, state.plotData]);
 
 
   return (
-    <div className="h-screen flex flex-col lg:flex-row bg-[var(--background)] overflow-hidden">
+    <div className="h-screen flex bg-[var(--background)] overflow-x-hidden lg:overflow-hidden">
+      {/* Overlay for mobile */}
+      {state.isSidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          onClick={() => dispatch({ type: 'SET_SIDEBAR_OPEN', payload: false })}
+        />
+      )}
       <ControlsSidebar
         selectedPair={state.selectedPair}
-        handleSelectedPairChange={handleSelectedPairChange}
+        handleSelectedPairChange={handlers.handleSelectedPairChange}
         handleLoadData={handleLoadData}
         isLoadingData={state.isLoadingData}
         isTraining={state.isTraining}
         params={state.params}
-        handleParamChange={handleParamChange}
-        handleParamKeyDown={handleParamKeyDown}
+        handleParamChange={handlers.handleParamChange}
+        handleParamKeyDown={handlers.handleParamKeyDown}
         maxBatchSize={state.maxBatchSize}
         paramContainerRef={paramContainerRef}
         forexPairs={FOREX_PAIRS}
+        isSidebarOpen={state.isSidebarOpen}
+        setIsSidebarOpen={(isOpen) => dispatch({ type: 'SET_SIDEBAR_OPEN', payload: isOpen })}
       />
 
       <div className="flex-1 flex flex-col min-h-0 min-w-0">
-        <Header theme={state.theme} setTheme={(theme: Theme) => dispatch({ type: 'SET_THEME', payload: theme })} />
+        <Header theme={state.theme} setTheme={(theme: Theme) => dispatch({ type: 'SET_THEME', payload: theme })} onMenuClick={() => dispatch({ type: 'SET_SIDEBAR_OPEN', payload: true })} />
 
-        <div className="flex-1 container mx-auto p-4 flex flex-col lg:flex-row gap-4 min-h-0">
+        <main className="flex-1 container mx-auto p-4 flex flex-col lg:flex-row gap-4 min-h-0 overflow-y-auto">
           <MainContent
             handleTrain={handleTrain}
             handleTest={handleTest}
@@ -563,7 +582,7 @@ export default function Home() {
             outputLog={state.outputLog}
             logContainerRef={logContainerRef}
           />
-        </div>
+        </main>
       </div>
     </div>
   );

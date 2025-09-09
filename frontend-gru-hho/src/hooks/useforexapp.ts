@@ -15,6 +15,7 @@ type AppState = {
   isTesting: boolean;
   isPredicting: boolean;
   isTrained: boolean;
+  isSidebarOpen: boolean;
   status: string;
   outputLog: string[];
   tableData: DataPoint[];
@@ -40,6 +41,7 @@ type Action =
   | { type: 'SET_TESTING'; payload: boolean }
   | { type: 'SET_PREDICTING'; payload: boolean }
   | { type: 'SET_IS_TRAINED'; payload: boolean }
+  | { type: 'SET_SIDEBAR_OPEN'; payload: boolean }
   | { type: 'SET_STATUS'; payload: string }
   | { type: 'ADD_LOG'; payload: string }
   | { type: 'RESET_LOG' }
@@ -57,6 +59,7 @@ const initialState: AppState = {
   isTesting: false,
   isPredicting: false,
   isTrained: false,
+  isSidebarOpen: false,
   status: 'Please select a forex pair and load the data.',
   outputLog: [],
   tableData: [],
@@ -88,6 +91,8 @@ function appReducer(state: AppState, action: Action): AppState {
       return { ...state, isPredicting: action.payload };
     case 'SET_IS_TRAINED':
       return { ...state, isTrained: action.payload };
+    case 'SET_SIDEBAR_OPEN':
+      return { ...state, isSidebarOpen: action.payload };
     case 'SET_STATUS':
       return { ...state, status: action.payload };
     case 'ADD_LOG':
