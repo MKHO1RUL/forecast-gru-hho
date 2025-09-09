@@ -189,9 +189,9 @@ export default function Home() {
   }, [state.selectedPair, dispatch]);
 
   const handleTrain = useCallback(async () => {
-    const requiredParams: (keyof Omit<typeof state.params, 'n_hari'>)[] = [
+    const requiredParams = [
       'jml_hdnunt', 'batas_MSE', 'batch_size', 'maks_epoch', 'elang', 'iterasi'
-    ];
+    ] as const;
 
     const missingParams = requiredParams.filter(p => !trainingParamsMemo[p] || trainingParamsMemo[p].trim() === '');
 

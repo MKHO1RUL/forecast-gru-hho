@@ -1,13 +1,9 @@
 import pandas as pd
-# [IMPROVEMENT] Import NumPy for fast, vectorized mathematical operations.
-# This is the core change that dramatically improves performance.
 import numpy as np
 import random
 import math
-# [IMPROVEMENT] Add type hints for better code readability and maintainability.
 from typing import List, Tuple, Dict
 
-# --- Kelas DataPreprocessing ---
 class DataPreprocessing:
     """Handles loading, normalizing, splitting, and shaping the time-series data."""
     def __init__(self, train_percent: float = 0.7):
@@ -65,7 +61,6 @@ class DataPreprocessing:
             y.append(data[i + input_size])
         return np.array(X), np.array(y)
 
-# --- Kelas GRU ---
 class GRU:
     """A from-scratch implementation of a Gated Recurrent Unit (GRU) using NumPy."""
     def __init__(self, jml_hdnunt: int, batch_size: int):
@@ -115,8 +110,6 @@ class GRU:
         return mse_per_elang, h_t, np.array(prediksi).tolist()
 
     def gru_forw_predict(self, x_t: np.ndarray, ht_min: np.ndarray, bobot: List) -> Tuple[float, np.ndarray]:
-        # [REFACTOR & PERFORMANCE] Same as above. The logic is identical to your
-        # original, but implemented with fast NumPy operations.
         """Performs a forward pass for a single prediction step."""
         W_r, U_r, W_z, U_z, W_h, U_h, W_y = [np.array(w) for w in bobot]
 
@@ -128,7 +121,6 @@ class GRU:
 
         return y_t[0, 0], h_t
 
-# --- Kelas HHO ---
 class HHO:
     """Implements the Harris Hawks Optimization algorithm to tune GRU weights."""
     def __init__(self, elang: int, iterasi: int, elang_y: int, jml_hdnunt: int, batch_size: int, input_size: int = 5):
@@ -177,9 +169,6 @@ class HHO:
         return hasil_konversi
 
     def hho(self, f_error: List[Tuple[str, float]], max_iter: int, populasi: List[List[float]], ht_min: np.ndarray, X_train: np.ndarray, y_train: np.ndarray, batas_MSE: float) -> Tuple[List, List, np.ndarray]:
-        # [NO CHANGE] The core HHO algorithm (exploration/exploitation phases, energy calculation)
-        # is identical. The only difference is that it now calls the fast, vectorized
-        # `gru_forward` method, which is the source of the performance gain.
         """The main HHO optimization loop."""
         beta = 1.5
         sigma = ((math.gamma(1 + beta) * math.sin((math.pi * beta) / 2)) / (math.gamma((1 + beta) / 2) * beta * (2 ** ((beta - 1) / 2)))) ** (1 / beta)
@@ -204,14 +193,14 @@ class HHO:
                 else:
                     r = random.uniform(0, 1)
                     if r >= 0.5:
-                        if abs(E) >= 0.5: # Soft besiege
+                        if abs(E) >= 0.5:
                             popbaru = [x_rabbit[j] - populasi[i][j] - E * abs(J * x_rabbit[j] - populasi[i][j]) for j in range(self.elang_y)]
                         else:
                             popbaru = [x_rabbit[j] - E * abs(x_rabbit[j] - populasi[i][j]) for j in range(self.elang_y)]
                         pop_new.append(("X", popbaru))
                     else:
                         lf_step = np.array([0.01 * ((random.uniform(0, 1) * sigma) / (abs(random.uniform(0, 1)) ** (1 / beta))) for _ in range(self.elang_y)])
-                        if abs(E) >= 0.5: # Soft besiege with progressive rapid dives
+                        if abs(E) >= 0.5:
                             Y = np.array(x_rabbit) - E * abs(J * np.array(x_rabbit) - np.array(populasi[i]))
                         else:
                             Y = np.array(x_rabbit) - E * abs(J * np.array(x_rabbit) - np.array(x_m))
@@ -228,12 +217,10 @@ class HHO:
             bobot_hho = self.hawks_conv(pop_new)
             mse_hho, _, _ = self.gru.gru_forward(X_train, y_train, bobot_hho, ht_min)
 
-            # Update population based on new results
             next_populasi = []
             next_f_error = []
             pop_new_idx = 0
             for i in range(self.elang):
-                # This hawk did not perform a hard/soft pounce with dives
                 if pop_new_idx >= len(pop_new) or pop_new[pop_new_idx][0] == "X":
                     if mse_hho[pop_new_idx][1] < f_error[i][1]:
                         next_f_error.append(mse_hho[pop_new_idx])
@@ -242,11 +229,7 @@ class HHO:
                         next_f_error.append(f_error[i])
                         next_populasi.append(populasi[i])
                     pop_new_idx += 1
-                # This hawk performed a pounce with dives, we need to check Y and Z
                 else:
-                    # The logic in the original code for Y/Z selection was complex.
-                    # The new logic inside the loop already decided whether to keep Y or generate Z.
-                    # So we just compare the result with the original hawk.
                     if mse_hho[pop_new_idx][1] < f_error[i][1]:
                         next_f_error.append(mse_hho[pop_new_idx])
                         next_populasi.append(pop_new[pop_new_idx][1])
@@ -265,7 +248,6 @@ class HHO:
         self.pop_elang = populasi
         return f_error, populasi
 
-# --- Kelas GRUHHO ---
 class GRUHHO:
     """Orchestrates the GRU training process using the HHO algorithm."""
     def __init__(self, jml_hdnunt: int, batas_MSE: float, batch_size: int, maks_epoch: int, elang: int, iterasi: int, input_size: int = 5):
@@ -290,7 +272,6 @@ class GRUHHO:
         ht_min = None
         pop_elang = self.hho.pop_elang
         
-        # Initial fitness evaluation
         bobot_elang = self.hho.hawks_conv(pop_elang)
         f_error, ht_min, _ = self.gru.gru_forward(X_train, y_train, bobot_elang, ht_min)
 
@@ -300,16 +281,13 @@ class GRUHHO:
         while min(e[1] for e in f_error) > self.batas_MSE and epoch < self.maks_epoch:
             epoch += 1
             
-            # 1. HHO mengoptimalkan bobot. `ht_min` digunakan sebagai baseline konstan di dalamnya.
             f_error, pop_elang = self.hho.hho(f_error, self.iterasi, pop_elang, ht_min, X_train, y_train, self.batas_MSE)
             
             current_best_mse = min(e[1] for e in f_error)
             log_entry = f"Epoch {epoch}/{self.maks_epoch}, Best MSE: {current_best_mse}"
             self.training_log.append(log_entry)
-            yield log_entry # Yield the log for real-time update
+            yield log_entry
 
-            # 2. PERBAIKAN LOGIKA: Setelah bobot terbaik ditemukan, jalankan GRU sekali lagi
-            #    dengan bobot tersebut untuk mendapatkan `ht_min` yang akan dibawa ke epoch berikutnya.
             best_idx_epoch = min(range(len(f_error)), key=lambda i: f_error[i][1])
             bobot_terbaik_epoch = self.hho.hawks_conv([pop_elang[best_idx_epoch]])
             _, ht_min, _ = self.gru.gru_forward(X_train, y_train, bobot_terbaik_epoch, ht_min)
