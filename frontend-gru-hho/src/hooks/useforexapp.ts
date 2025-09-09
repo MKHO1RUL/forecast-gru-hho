@@ -5,7 +5,6 @@ import { Chart as ChartJS } from 'chart.js';
 export type PlotDataset = {
   label: string;
   data: (number | { x: number; y: number } | null)[];
-  // Izinkan properti lain yang mungkin digunakan oleh Chart.js
   [key: string]: unknown;
 };
 
@@ -121,20 +120,16 @@ function appReducer(state: AppState, action: Action): AppState {
 export const useForexApp = () => {
   const [state, dispatch] = useReducer(appReducer, initialState);
 
-  // --- Refs ---
   const chartRef = useRef<ChartJS<'line'>>(null);
   const paramContainerRef = useRef<HTMLDivElement>(null);
   const logContainerRef = useRef<HTMLDivElement>(null);
 
-  // --- Effects ---
-  // Efek untuk auto-scroll pada output log
   useEffect(() => {
     if (logContainerRef.current) {
       logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
     }
   }, [state.outputLog]);
 
-  // Efek untuk mengatur tema awal berdasarkan preferensi OS dan mendengarkan perubahan
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     dispatch({ type: 'SET_THEME', payload: mediaQuery.matches ? 'dark' : 'light' });
@@ -143,7 +138,6 @@ export const useForexApp = () => {
     return () => mediaQuery.removeEventListener('change', handler);
   }, []);
 
-  // Efek untuk menerapkan kelas tema ke elemen root
   useEffect(() => {
     const root = window.document.documentElement;
     if (state.theme === 'dark') {
@@ -153,7 +147,6 @@ export const useForexApp = () => {
     }
   }, [state.theme]);
 
-  // --- Callbacks ---
   const handleParamChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     dispatch({ type: 'SET_PARAMS', payload: { name, value } });
@@ -177,7 +170,7 @@ export const useForexApp = () => {
     let nextIndex;
     if (e.key === 'ArrowDown') {
       nextIndex = (currentIndex + 1) % inputs.length;
-    } else { // ArrowUp
+    } else {
       nextIndex = (currentIndex - 1 + inputs.length) % inputs.length;
     }
 

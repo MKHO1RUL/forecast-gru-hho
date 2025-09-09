@@ -1,15 +1,13 @@
-// components/ScrollingDotMatrix.tsx
 import React, { useRef, useLayoutEffect } from 'react';
 import { DotMatrixText } from './dotmatrixtext';
 
 interface ScrollingDotMatrixProps {
   text: string;
   color?: string;
-  pixelsPerSecond?: number; // Kecepatan dalam piksel per detik
+  pixelsPerSecond?: number;
   className?: string;
 }
 
-// Sub-komponen untuk item scroll, di-memo-kan agar tidak re-render jika props tidak berubah.
 const ScrollItem = React.memo(({ text, color, className, fwdRef }: {
   text: string;
   color?: string;
@@ -25,15 +23,12 @@ ScrollItem.displayName = 'ScrollItem';
 export const ScrollingDotMatrix: React.FC<ScrollingDotMatrixProps> = React.memo(({
   text,
   color,
-  pixelsPerSecond = 50, // Kecepatan default 50px per detik
+  pixelsPerSecond = 50,
   className = '',
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const itemRef = useRef<HTMLDivElement>(null);
 
-  // Efek ini hanya berjalan saat `text` berubah.
-  // Ia mengukur lebar dan memperbarui CSS variable langsung di DOM
-  // tanpa memicu re-render state, sehingga animasi tidak "reset".
   useLayoutEffect(() => {
     if (itemRef.current && containerRef.current) {
       const width = itemRef.current.scrollWidth;

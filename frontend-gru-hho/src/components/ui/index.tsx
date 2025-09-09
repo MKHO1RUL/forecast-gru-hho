@@ -1,6 +1,5 @@
 import React, { ChangeEvent } from 'react';
 
-// --- Icons ---
 export const SpinnerIcon = () => (
   <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -26,7 +25,6 @@ export const MoonIcon = () => (
   </svg>
 );
 
-// --- UI Components ---
 export const Card = ({ title, children, className }: { title?: string, children: React.ReactNode, className?: string }) => (
   <div className={`bg-[var(--card-background)] rounded-xl shadow-lg p-4 ${className}`}>
     {title && <h3 className="text-lg font-semibold mb-2 text-[var(--foreground)]">{title}</h3>}

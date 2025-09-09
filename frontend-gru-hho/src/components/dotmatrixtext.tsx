@@ -1,4 +1,3 @@
-// components/DotMatrixText.tsx
 import React from 'react';
 
 interface DotMatrixTextProps {
@@ -14,14 +13,13 @@ export const DotMatrixText: React.FC<DotMatrixTextProps> = ({
   glowColor,
   className = '',
 }) => {
-  // Gunakan versi warna yang semi-transparan untuk efek cahaya
-  const finalGlowColor = glowColor || `${color}4D`; // 80 dalam hex setara dengan ~50% opacity
+  const finalGlowColor = glowColor || `${color}4D`;
 
   const style: React.CSSProperties = {
-    color: finalGlowColor, // Ini akan menjadi cahaya di antara titik-titik
-    textShadow: `0 0 1px ${finalGlowColor}`, // Mengurangi glow agar titik lebih tajam
-    backgroundImage: `radial-gradient(${color} 0.6px, transparent 0.6px)`, // Ukuran titik lebih kecil
-    backgroundSize: '2px 2px', // Jarak antar titik lebih rapat
+    color: finalGlowColor,
+    textShadow: `0 0 1px ${finalGlowColor}`,
+    backgroundImage: `radial-gradient(${color} 0.6px, transparent 0.6px)`,
+    backgroundSize: '2px 2px',
     WebkitBackgroundClip: 'text',
     backgroundClip: 'text',
   };

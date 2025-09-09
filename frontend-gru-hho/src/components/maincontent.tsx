@@ -39,12 +39,12 @@ export const MainContent = ({
   handleResetZoom,
 }: MainContentProps) => {
   const statusColor = status.toLowerCase().includes('error')
-    ? '#ff3333' // red
+    ? '#ff3333'
     : status.toLowerCase().includes('complete')
-    ? '#33ff33' // green
+    ? '#33ff33'
     : status.toLowerCase().includes('loading') || status.toLowerCase().includes('progress')
-    ? '#ffaa33' // orange
-    : '#FFFFFF'; // yellow as default
+    ? '#ffaa33'
+    : '#FFFFFF';
 
   return (
     <main className="w-full lg:flex-[5] min-w-0 flex flex-col gap-4">
