@@ -54,7 +54,7 @@ export const MainContent = ({
             Welcome! Tap the <span className="font-bold text-lg">☰</span> menu button to get started.
           </p>
           <p className="text-sm text-[var(--text-muted)] mt-1 text-center">
-            You'll need to load data and set parameters before training.
+            You&apos;ll need to load data and set parameters before training.
           </p>
         </Card>
       )}

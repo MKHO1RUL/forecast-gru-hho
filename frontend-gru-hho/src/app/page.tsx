@@ -208,7 +208,7 @@ export default function Home() {
       'jml_hdnunt', 'batas_MSE', 'batch_size', 'maks_epoch', 'elang', 'iterasi'
     ];
 
-    const missingParams = requiredParams.filter(p => !state.params[p] || state.params[p].trim() === '');
+    const missingParams = requiredParams.filter(p => !trainingParamsMemo[p] || trainingParamsMemo[p].trim() === '');
 
     if (missingParams.length > 0) {
       const message = `Please fill all parameter fields before training.`;
@@ -233,12 +233,12 @@ export default function Home() {
 
     try {
       const trainingParams = {
-        jml_hdnunt: parseInt(state.params.jml_hdnunt),
-        batas_MSE: parseFloat(state.params.batas_MSE),
-        batch_size: parseInt(state.params.batch_size),
-        maks_epoch: parseInt(state.params.maks_epoch),
-        elang: parseInt(state.params.elang),
-        iterasi: parseInt(state.params.iterasi),
+        jml_hdnunt: parseInt(trainingParamsMemo.jml_hdnunt),
+        batas_MSE: parseFloat(trainingParamsMemo.batas_MSE),
+        batch_size: parseInt(trainingParamsMemo.batch_size),
+        maks_epoch: parseInt(trainingParamsMemo.maks_epoch),
+        elang: parseInt(trainingParamsMemo.elang),
+        iterasi: parseInt(trainingParamsMemo.iterasi),
       };
 
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/train`, {
@@ -296,7 +296,7 @@ export default function Home() {
     } finally {
       dispatch({ type: 'SET_TRAINING', payload: false });
     }
-  }, [state.params, dispatch]);
+  }, [trainingParamsMemo, dispatch]);
 
   const handleTest = useCallback(async () => {
     dispatch({ type: 'SET_TESTING', payload: true });
@@ -352,7 +352,7 @@ export default function Home() {
     } finally {
       dispatch({ type: 'SET_TESTING', payload: false });
     }
-  }, [dispatch, state]);
+  }, [dispatch]);
 
   const handlePredict = useCallback(async () => {
     dispatch({ type: 'SET_PREDICTING', payload: true });
