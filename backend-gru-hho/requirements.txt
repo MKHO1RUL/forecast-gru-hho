@@ -4,6 +4,4 @@ python-multipart
 pydantic
 pandas
 yfinance
-scikit-learn
-tensorflow
-numpy
+numpy
