@@ -65,6 +65,7 @@ class TrainingParams(BaseModel):
     input_size: int = Field(5, gt=0, description="Ukuran sekuens input, harus lebih besar dari 0.")
 
 @app.get("/get-data")
+@app.get("/api/get-data")
 async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
     """
     Mengambil data forex dari yfinance dengan caching.
@@ -128,6 +129,7 @@ async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
     })
 
 @app.post("/train")
+@app.post("/api/train")
 async def train_model(params: TrainingParams):
     try:
         df = model_state.get(STATE_RAW_DF)
@@ -182,6 +184,7 @@ async def train_model(params: TrainingParams):
         raise HTTPException(status_code=500, detail=f"Error during training setup: {str(e)}")
 
 @app.get("/test")
+@app.get("/api/test")
 async def test_model():
     model = model_state.get(STATE_MODEL)
     preprocessor = model_state.get(STATE_PREPROCESSOR)
@@ -226,6 +229,7 @@ async def test_model():
         raise HTTPException(status_code=500, detail=f"Error during testing: {str(e)}")
 
 @app.get("/predict")
+@app.get("/api/predict")
 async def predict_future(n_hari: int = Query(..., gt=0)):
     model = model_state.get(STATE_MODEL)
     preprocessor = model_state.get(STATE_PREPROCESSOR)
