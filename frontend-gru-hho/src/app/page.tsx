@@ -42,6 +42,8 @@ const FOREX_PAIRS = [
   "EURUSD=X", "GBPUSD=X", "USDJPY=X", "GBPJPY=X", "AUDUSD=X", "USDCAD=X", "USDCHF=X", "NZDUSD=X"
 ];
 
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8080").replace(/\/$/, "");
+
 export default function Home() {
   const { state, dispatch, refs, handlers } = useForexApp();
   const { chartRef, paramContainerRef, logContainerRef } = refs;
@@ -103,7 +105,7 @@ export default function Home() {
     dispatch({ type: 'SET_TABLE_DATA', payload: { data: [], maxBatchSize: 0 }});
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/get-data?pair=${state.selectedPair}`);
+      const res = await fetch(`${API_URL}/get-data?pair=${state.selectedPair}`);
 
       if (!res.ok) {
         const errorData = await res.json();
@@ -224,7 +226,7 @@ export default function Home() {
         iterasi: parseInt(trainingParamsMemo.iterasi),
       };
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/train`, {
+      const res = await fetch(`${API_URL}/train`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(trainingParams),
@@ -244,17 +246,21 @@ export default function Home() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let done = false;
+      let buffer = '';
 
       while (!done) {
         const { value, done: readerDone } = await reader.read();
         done = readerDone;
-        const chunk = decoder.decode(value, { stream: !done });
+        buffer += decoder.decode(value, { stream: !done });
         
-        const lines = chunk.split('\n').filter(line => line.trim() !== '');
+        const lines = buffer.split('\n');
+        buffer = done ? '' : (lines.pop() || '');
 
         for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
           try {
-            const data = JSON.parse(line);
+            const data = JSON.parse(trimmed);
             if (data.type === 'log') {
               dispatch({ type: 'ADD_LOG', payload: data.message });
             } else if (data.type === 'complete') {
@@ -265,7 +271,7 @@ export default function Home() {
               throw new Error(data.message);
             }
           } catch (e) {
-            console.error("Failed to parse stream line:", line, e);
+            console.error("Failed to parse stream line:", trimmed, e);
           }
         }
       }
@@ -285,7 +291,7 @@ export default function Home() {
     dispatch({ type: 'ADD_LOG', payload: 'Testing started...' });
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/test`);
+      const res = await fetch(`${API_URL}/test`);
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.detail || 'Testing failed.');
@@ -339,7 +345,7 @@ export default function Home() {
     dispatch({ type: 'ADD_LOG', payload: 'Prediction started...' });
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/predict?n_hari=${state.params.n_hari}`);
+      const res = await fetch(`${API_URL}/predict?n_hari=${state.params.n_hari}`);
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.detail || 'Prediction failed.');

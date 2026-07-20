@@ -27,8 +27,8 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -83,13 +83,25 @@ async def get_data(pair: str = Query(..., description="Contoh: 'EURUSD=X'")):
                 raise HTTPException(status_code=404, detail=f"Tidak ada data untuk pair: {pair}. Mungkin ticker tidak valid.")
 
             if isinstance(data.columns, pd.MultiIndex):
-                data.columns = data.columns.get_level_values(0)
+                if 'Close' in data.columns.get_level_values(0):
+                    data = data['Close']
+                elif 'Close' in data.columns.get_level_values(1):
+                    data = data.xs('Close', axis=1, level=1)
+                else:
+                    data.columns = data.columns.get_level_values(0)
 
-            if 'Close' not in data.columns:
-                raise ValueError(f"Kolom 'Close' tidak ditemukan dalam data untuk {pair}")
+            if isinstance(data, pd.DataFrame):
+                if 'Close' in data.columns:
+                    target_col = data['Close']
+                else:
+                    target_col = data.iloc[:, 0]
+            else:
+                target_col = data
 
-            df = data[['Close']].dropna().copy()
-            df.rename(columns={'Close': 'Terakhir'}, inplace=True)
+            if isinstance(target_col, pd.DataFrame):
+                target_col = target_col.iloc[:, 0]
+
+            df = pd.DataFrame({'Terakhir': target_col}).dropna()
             df.index.name = 'Tanggal'
 
             cache[pair] = {"data": df, "last_updated": now_utc}
