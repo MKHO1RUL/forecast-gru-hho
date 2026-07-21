@@ -26,6 +26,8 @@ import { InfoSidebar } from "../components/infosidebar";
 import { useForexApp, PlotDataset } from "../hooks/useforexapp";
 import { DataPoint, PredictionData, Theme } from "../types";
 
+import { DataPreprocessing, GRUHHO, DataRecord } from "../lib/model";
+
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -42,11 +44,13 @@ const FOREX_PAIRS = [
   "EURUSD=X", "GBPUSD=X", "USDJPY=X", "GBPJPY=X", "AUDUSD=X", "USDCAD=X", "USDCHF=X", "NZDUSD=X"
 ];
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL || "/api").replace(/\/$/, "");
-
 export default function Home() {
   const { state, dispatch, refs, handlers } = useForexApp();
   const { chartRef, paramContainerRef, logContainerRef } = refs;
+
+  const preprocessorRef = useRef<DataPreprocessing | null>(null);
+  const modelRef = useRef<GRUHHO | null>(null);
+  const rawRecordsRef = useRef<DataRecord[]>([]);
 
   useEffect(() => {
     let zoomPlugin: Plugin | undefined;
@@ -105,7 +109,7 @@ export default function Home() {
     dispatch({ type: 'SET_TABLE_DATA', payload: { data: [], maxBatchSize: 0 }});
 
     try {
-      const res = await fetch(`${API_URL}/get-data?pair=${state.selectedPair}`);
+      const res = await fetch(`/api/get-data?pair=${state.selectedPair}`);
 
       if (!res.ok) {
         const errorData = await res.json();
@@ -113,6 +117,10 @@ export default function Home() {
       }
 
       const data = await res.json();
+      rawRecordsRef.current = data.data;
+      preprocessorRef.current = null;
+      modelRef.current = null;
+
       dispatch({ type: 'SET_TABLE_DATA', payload: { data: data.data, maxBatchSize: data.max_batch_size } });
       dispatch({ type: 'SET_STATUS', payload: 'Data loaded successfully.' });
       dispatch({ type: 'ADD_LOG', payload: 'Data loaded successfully. Ready for training.' });
@@ -205,6 +213,11 @@ export default function Home() {
       return;
     }
 
+    if (!rawRecordsRef.current || rawRecordsRef.current.length === 0) {
+      alert("Data tidak ditemukan. Silakan muat data melalui tombol Load Data terlebih dahulu.");
+      return;
+    }
+
     dispatch({ type: 'SET_TRAINING', payload: true });
     dispatch({ type: 'SET_STATUS', payload: 'Training in progress... Please wait.' });
     dispatch({ type: 'ADD_LOG', payload: 'Training started...' });
@@ -215,66 +228,33 @@ export default function Home() {
       )
     });
 
-
     try {
-      const trainingParams = {
-        jml_hdnunt: parseInt(trainingParamsMemo.jml_hdnunt),
-        batas_MSE: parseFloat(trainingParamsMemo.batas_MSE),
-        batch_size: parseInt(trainingParamsMemo.batch_size),
-        maks_epoch: parseInt(trainingParamsMemo.maks_epoch),
-        elang: parseInt(trainingParamsMemo.elang),
-        iterasi: parseInt(trainingParamsMemo.iterasi),
-      };
+      const inputSize = 5;
+      const preprocessor = new DataPreprocessing(0.7);
+      preprocessor.loadAndPreprocess(rawRecordsRef.current);
+      preprocessorRef.current = preprocessor;
 
-      const res = await fetch(`${API_URL}/train`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(trainingParams),
-      });
+      const [X_train, y_train] = preprocessor.createPola(preprocessor.trainData, inputSize);
 
-      if (!res.ok || !res.body) {
-        const errorData = await res.json();
-        if (errorData.detail && Array.isArray(errorData.detail)) {
-          const errorMessages = errorData.detail.map(
-            (err: { loc: string[]; msg: string }) => `- ${err.loc.length > 1 ? err.loc[1] : 'Error'}: ${err.msg}`
-          ).join('\n');
-          throw new Error(`Invalid Parameters:\n${errorMessages}`);
-        }
-        throw new Error(errorData.detail || 'Training failed to start.');
+      const model = new GRUHHO(
+        parseInt(trainingParamsMemo.jml_hdnunt),
+        parseFloat(trainingParamsMemo.batas_MSE),
+        parseInt(trainingParamsMemo.batch_size),
+        parseInt(trainingParamsMemo.maks_epoch),
+        parseInt(trainingParamsMemo.elang),
+        parseInt(trainingParamsMemo.iterasi),
+        inputSize
+      );
+      modelRef.current = model;
+
+      for await (const log of model.trainingGruGenerator(X_train, y_train)) {
+        dispatch({ type: 'ADD_LOG', payload: log });
       }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      let buffer = '';
+      dispatch({ type: 'SET_STATUS', payload: 'Training complete!' });
+      dispatch({ type: 'ADD_LOG', payload: `Training complete! Best MSE: ${model.bestMseInfo[1].toFixed(6)}` });
+      dispatch({ type: 'SET_IS_TRAINED', payload: true });
 
-      while (!done) {
-        const { value, done: readerDone } = await reader.read();
-        done = readerDone;
-        buffer += decoder.decode(value, { stream: !done });
-        
-        const lines = buffer.split('\n');
-        buffer = done ? '' : (lines.pop() || '');
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-          try {
-            const data = JSON.parse(trimmed);
-            if (data.type === 'log') {
-              dispatch({ type: 'ADD_LOG', payload: data.message });
-            } else if (data.type === 'complete') {
-              dispatch({ type: 'SET_STATUS', payload: 'Training complete!' });
-              dispatch({ type: 'ADD_LOG', payload: `Training complete! Best MSE: ${data.best_mse}` });
-              dispatch({ type: 'SET_IS_TRAINED', payload: true });
-            } else if (data.type === 'error') {
-              throw new Error(data.message);
-            }
-          } catch (e) {
-            console.error("Failed to parse stream line:", trimmed, e);
-          }
-        }
-      }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred during training.';
       dispatch({ type: 'SET_STATUS', payload: `Error: ${errorMessage}` });
@@ -291,26 +271,40 @@ export default function Home() {
     dispatch({ type: 'ADD_LOG', payload: 'Testing started...' });
 
     try {
-      const res = await fetch(`${API_URL}/test`);
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || 'Testing failed.');
+      const model = modelRef.current;
+      const preprocessor = preprocessorRef.current;
+      if (!model || !preprocessor || !model.bestWeights) {
+        throw new Error('Model atau preprocessor belum siap. Latih model terlebih dahulu.');
       }
 
-      const data = await res.json();
+      const inputSize = model.inputSize;
+      const [X_test, y_test] = preprocessor.createPola(preprocessor.testData, inputSize);
+      const [prediksiNorm, mseTest] = model.testGru(X_test, y_test);
+
+      const hasilPrediksiDenorm = preprocessor.dataDenormalisasi(prediksiNorm);
+
+      const trainSize = preprocessor.trainData.length;
+      const startIndex = trainSize + inputSize;
+      const endIndex = startIndex + y_test.length;
+
+      const dates = preprocessor.df.slice(startIndex, endIndex).map((d) => d.Tanggal);
+
       dispatch({ type: 'SET_STATUS', payload: 'Testing complete.' });
-      dispatch({ type: 'ADD_LOG', payload: `Testing complete! MSE: ${data.mse}` });
+      dispatch({ type: 'ADD_LOG', payload: `Testing complete! MSE: ${mseTest.toFixed(6)}` });
 
       dispatch({
         type: 'UPDATE_PLOT_DATA', payload: (prevDatasets: PlotDataset[]) => {
-        const baseDatasets = prevDatasets.filter(
-          (ds) => ds.label !== 'Testing Prediction'
-        );
-        return [
+          const baseDatasets = prevDatasets.filter(
+            (ds) => ds.label !== 'Testing Prediction'
+          );
+          return [
             ...baseDatasets,
             {
               label: 'Testing Prediction',
-              data: data.prediction_data.dates.map((date: string, index: number) => ({ x: new Date(date).getTime(), y: data.prediction_data.values[index] })),
+              data: dates.map((date: string, index: number) => ({
+                x: new Date(date).getTime(),
+                y: hasilPrediksiDenorm[index],
+              })),
               borderColor: 'orange',
               tension: 0.1,
               pointRadius: 0,
@@ -327,7 +321,8 @@ export default function Home() {
               },
             },
           ];
-      }});
+        }
+      });
 
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred during testing.';
@@ -345,17 +340,36 @@ export default function Home() {
     dispatch({ type: 'ADD_LOG', payload: 'Prediction started...' });
 
     try {
-      const res = await fetch(`${API_URL}/predict?n_hari=${state.params.n_hari}`);
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || 'Prediction failed.');
+      const model = modelRef.current;
+      const preprocessor = preprocessorRef.current;
+      if (!model || !preprocessor || !model.bestWeights) {
+        throw new Error('Model atau preprocessor belum siap. Latih model terlebih dahulu.');
       }
 
-      const data = await res.json();
+      const nHari = typeof state.params.n_hari === 'number' ? state.params.n_hari : parseInt(state.params.n_hari || '1', 10);
+      const dataTerakhir = preprocessor.df.slice(-model.inputSize).map((d) => d.Terakhir);
+      const hasilPrediksiDenorm = model.forwPredict(dataTerakhir, nHari, preprocessor);
+
+      const lastDateStr = preprocessor.df[preprocessor.df.length - 1].Tanggal;
+      const futurePredictions: PredictionData[] = [];
+      const currDate = new Date(lastDateStr);
+
+      for (let i = 0; i < nHari; i++) {
+        currDate.setDate(currDate.getDate() + 1);
+        while (currDate.getDay() === 0 || currDate.getDay() === 6) {
+          currDate.setDate(currDate.getDate() + 1);
+        }
+        const yyyy = currDate.getFullYear();
+        const mm = String(currDate.getMonth() + 1).padStart(2, "0");
+        const dd = String(currDate.getDate()).padStart(2, "0");
+        futurePredictions.push({
+          date: `${yyyy}-${mm}-${dd}`,
+          value: hasilPrediksiDenorm[i],
+        });
+      }
+
       dispatch({ type: 'SET_STATUS', payload: 'Prediction complete.' });
       dispatch({ type: 'ADD_LOG', payload: 'Prediction complete.' });
-
-      const futurePredictions: PredictionData[] = data.predictions;
 
       if (futurePredictions.length > 0) {
         const lastPredictionDate = new Date(futurePredictions[futurePredictions.length - 1].date).getTime();
